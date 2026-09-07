@@ -1,3 +1,5 @@
+@file:OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+
 package com.jiaocai.download.ui.screens
 
 import android.view.ViewGroup
@@ -80,7 +82,7 @@ fun LoginScreen(
         while (isActive) {
             val raw = suspendCancellableCoroutine { cont ->
                 webView.evaluateJavascript(EXTRACT_JS) { value ->
-                    if (cont.isActive) cont.resume(value)
+                    if (cont.isActive) cont.resume(value) { }
                 }
             }
             val trimmed = raw?.trim()

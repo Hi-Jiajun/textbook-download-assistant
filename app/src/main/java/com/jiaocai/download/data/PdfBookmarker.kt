@@ -6,6 +6,7 @@ import com.tom_roush.pdfbox.pdmodel.PDDocument
 import com.tom_roush.pdfbox.pdmodel.interactive.documentnavigation.destination.PDPageFitWidthDestination
 import com.tom_roush.pdfbox.pdmodel.interactive.documentnavigation.outline.PDDocumentOutline
 import com.tom_roush.pdfbox.pdmodel.interactive.documentnavigation.outline.PDOutlineItem
+import com.tom_roush.pdfbox.pdmodel.interactive.documentnavigation.outline.PDOutlineNode
 import java.io.File
 
 /**
@@ -30,7 +31,7 @@ object PdfBookmarker {
             val root = PDDocumentOutline()
             catalog.documentOutline = root
 
-            fun addTo(parent: PDOutlineItem, items: List<Chapter>) {
+            fun addTo(parent: PDOutlineNode, items: List<Chapter>) {
                 for (c in items) {
                     val item = PDOutlineItem()
                     item.title = c.title
