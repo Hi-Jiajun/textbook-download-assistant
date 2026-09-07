@@ -1,0 +1,153 @@
+package com.jiaocai.download.ui
+
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import com.jiaocai.download.data.AuthSigner
+import com.jiaocai.download.data.DownloadEngine
+import com.jiaocai.download.data.LibraryStore
+import com.jiaocai.download.data.PdfBookmarker
+import com.jiaocai.download.data.SmartEduApi
+import com.jiaocai.download.data.TokenStore
+import com.jiaocai.download.model.ResourceInfo
+import com.jiaocai.download.model.SavedItem
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+
+class DownloadViewModel(app: Application) : AndroidViewModel(app) {
+
+    enum class Step { WELCOME, INPUT, LOGIN, RESOLVE, DOWNLOAD, DONE, LIBRARY }
+
+    data class UiState(
+        val step: Step = Step.WELCOME,
+        val urls: String = "",
+        val loginHint: String = "请在下方网页中先登录国家中小学智慧教育平台账号，登录成功后会在这里提示。",
+        val resources: List<ResourceInfo> = emptyList(),
+        val loading: Boolean = false,
+        val error: String? = null,
+        val progressDone: Long = 0,
+        val progressTotal: Long = 0,
+        val currentIndex: Int = 0,
+        val downloadedCount: Int = 0,
+        val bookmarksCount: Int = 0,
+        val library: List<SavedItem> = emptyList(),
+    )
+
+    private val _state = MutableStateFlow(UiState())
+    val state = _state.asStateFlow()
+
+    private val tokenStore = TokenStore(app)
+    private val engine = DownloadEngine(app)
+    private val libraryStore = LibraryStore(app)
+    private var credentials: AuthSigner.Credentials? = null
+
+    init {
+        _state.value = _state.value.copy(library = libraryStore.load())
+    }
+
+    fun setUrls(value: String) {
+        _state.value = _state.value.copy(urls = value)
+    }
+
+    fun go(step: Step) {
+        _state.value = _state.value.copy(step = step, error = null)
+    }
+
+    fun openLibrary() {
+        _state.value = _state.value.copy(step = Step.LIBRARY, library = libraryStore.load(), error = null)
+    }
+
+    /** WebView 捕获到登录凭据 JSON 后调用：保存本地并进入解析。 */
+    fun onTokenCaptured(json: String) {
+        viewModelScope.launch {
+            try {
+                val cred = AuthSigner.parseTokenInput(json)
+                credentials = cred
+                tokenStore.save(json)
+                _state.value = _state.value.copy(
+                    loginHint = "登录凭据已获取，正在解析资源…",
+                    error = null,
+                )
+                resolve()
+            } catch (e: AuthSigner.TokenInputError) {
+                _state.value = _state.value.copy(error = "未能识别登录凭据：${e.message}")
+            }
+        }
+    }
+
+    fun resolve() {
+        val urls = _state.value.urls.lines().map { it.trim() }.filter { it.isNotBlank() }
+        if (urls.isEmpty()) {
+            _state.value = _state.value.copy(error = "请先粘贴至少一个电子课本预览页链接。", step = Step.INPUT)
+            return
+        }
+        val cred = credentials ?: run {
+            _state.value = _state.value.copy(error = "尚未获取登录凭据，请回到登录步骤。", step = Step.LOGIN)
+            return
+        }
+        _state.value = _state.value.copy(loading = true, error = null, step = Step.RESOLVE)
+        viewModelScope.launch {
+            val results = mutableListOf<ResourceInfo>()
+            try {
+                for (url in urls) {
+                    results.add(SmartEduApi.resolve(url, cred, bookmarks = true))
+                }
+                _state.value = _state.value.copy(resources = results, loading = false, step = Step.RESOLVE)
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(
+                    loading = false,
+                    error = e.message ?: "解析失败，请检查链接与网络。",
+                )
+            }
+        }
+    }
+
+    fun download() {
+        val resources = _state.value.resources
+        if (resources.isEmpty()) return
+        val cred = credentials ?: run {
+            _state.value = _state.value.copy(error = "登录凭据缺失。")
+            return
+        }
+        _state.value = _state.value.copy(loading = true, error = null, step = Step.DOWNLOAD)
+        viewModelScope.launch {
+            val saved = mutableListOf<SavedItem>()
+            var bookmarks = 0
+            resources.forEachIndexed { index, resource ->
+                _state.value = _state.value.copy(currentIndex = index)
+                try {
+                    val file = engine.download(resource, cred) { done, total ->
+                        _state.value = _state.value.copy(progressDone = done, progressTotal = total)
+                    }
+                    val added = PdfBookmarker.addBookmarks(file, resource.chapters)
+                    if (added) bookmarks++
+                    val item = SavedItem(resource.title, file.absolutePath, resource.format, resource.edition, System.currentTimeMillis())
+                    libraryStore.append(item)
+                    saved.add(item)
+                    _state.value = _state.value.copy(downloadedCount = saved.size, bookmarksCount = bookmarks)
+                } catch (e: Exception) {
+                    _state.value = _state.value.copy(
+                        loading = false,
+                        error = "第 ${index + 1}/${resources.size} 本下载失败：${e.message}",
+                    )
+                    return@launch
+                }
+            }
+            _state.value = _state.value.copy(
+                loading = false,
+                library = libraryStore.load(),
+                step = Step.DONE,
+            )
+        }
+    }
+
+    fun deleteFromLibrary(path: String) {
+        _state.value = _state.value.copy(library = libraryStore.remove(path))
+    }
+
+    fun reset() {
+        credentials = null
+        _state.value = UiState(library = libraryStore.load())
+    }
+}
