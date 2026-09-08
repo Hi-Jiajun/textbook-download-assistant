@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
@@ -31,6 +32,10 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -50,6 +55,7 @@ fun LibraryScreen(
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
+    var pendingDelete by remember { mutableStateOf<SavedItem?>(null) }
     Column(Modifier.fillMaxSize().safeDrawingPadding().padding(16.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Text("我的教材库", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
@@ -65,15 +71,33 @@ fun LibraryScreen(
             LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 // 用 path+addedAt 作为唯一 key，避免同一本书重复下载产生相同路径导致 key 冲突。
                 items(library, key = { it.path + ":" + it.addedAt }) { item ->
-                    SavedCard(item, onDelete)
+                    SavedCard(item, onDelete = { pendingDelete = item })
                 }
             }
         }
     }
+    pendingDelete?.let { item ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text("删除教材") },
+            text = { Text("将同时删除本地 PDF 文件，且无法恢复。确定删除《${item.title}》吗？") },
+            confirmButton = {
+                TextButton(onClick = {
+                    onDelete(item.path)
+                    pendingDelete = null
+                }) {
+                    Text("删除", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDelete = null }) { Text("取消") }
+            },
+        )
+    }
 }
 
 @Composable
-private fun SavedCard(item: SavedItem, onDelete: (String) -> Unit) {
+private fun SavedCard(item: SavedItem, onDelete: () -> Unit) {
     val context = LocalContext.current
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -98,7 +122,7 @@ private fun SavedCard(item: SavedItem, onDelete: (String) -> Unit) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                TextButton(onClick = { onDelete(item.path) }) {
+                TextButton(onClick = onDelete) {
                     Text("删除", color = MaterialTheme.colorScheme.error)
                 }
             }

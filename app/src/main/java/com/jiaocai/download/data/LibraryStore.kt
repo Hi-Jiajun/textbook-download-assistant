@@ -42,10 +42,15 @@ class LibraryStore(private val context: Context) {
         return list
     }
 
-    fun remove(path: String): List<SavedItem> {
-        val list = load().filterNot { it.path == path }
-        save(list)
-        return list
+    /**
+     * 删除本地文件并从索引移除。文件不存在时只清理索引；
+     * 返回 false 表示文件存在但删除失败（例如被其他应用占用），此时索引保持不变。
+     */
+    fun remove(path: String): Boolean {
+        val target = File(path)
+        if (target.exists() && !target.delete()) return false
+        save(load().filterNot { it.path == path })
+        return true
     }
 
     private fun save(list: List<SavedItem>) {

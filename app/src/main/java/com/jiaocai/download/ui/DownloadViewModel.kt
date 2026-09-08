@@ -275,7 +275,12 @@ class DownloadViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun deleteFromLibrary(path: String) {
-        _state.value = _state.value.copy(library = libraryStore.remove(path))
+        if (libraryStore.remove(path)) {
+            _state.value = _state.value.copy(library = libraryStore.load(), error = null)
+            Toast.makeText(getApplication(), "已删除", Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(getApplication(), "删除失败：文件可能被其他应用占用", Toast.LENGTH_SHORT).show()
+        }
     }
 
     /** 下载完成后返回首页：清掉本次下载流程状态，但保留目录与登录态，避免每次都要重新登录。 */
