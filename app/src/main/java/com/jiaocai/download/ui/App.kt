@@ -2,7 +2,6 @@ package com.jiaocai.download.ui
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -22,8 +21,8 @@ fun App(viewModel: DownloadViewModel = viewModel()) {
     val state by viewModel.state.collectAsState()
     TextbookTheme {
         Surface(Modifier.fillMaxSize()) {
-            // 兼容刘海/挖孔/曲面屏：让内容避开状态栏与导航栏，防止顶部被遮挡
-            Box(Modifier.fillMaxSize().safeDrawingPadding()) {
+            // 安全区适配在各界面内按需处理（内容页避开状态栏/挖孔；下载页全屏沉浸）
+            Box(Modifier.fillMaxSize()) {
                 when (state.step) {
                     DownloadViewModel.Step.BROWSE -> BrowseScreen(
                         viewModel = viewModel,

@@ -15,6 +15,7 @@ import com.jiaocai.download.model.SavedItem
 import com.jiaocai.download.model.Textbook
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class DownloadViewModel(app: Application) : AndroidViewModel(app) {
@@ -56,6 +57,21 @@ class DownloadViewModel(app: Application) : AndroidViewModel(app) {
     init {
         _state.value = _state.value.copy(library = libraryStore.load())
         loadCatalog()
+        restoreCredentials()
+    }
+
+    /** 启动时从本地恢复上次登录的凭据，实现「记住登录」。 */
+    private fun restoreCredentials() {
+        viewModelScope.launch {
+            val saved = tokenStore.tokenJson.first()
+            if (saved != null && credentials == null) {
+                credentials = try {
+                    AuthSigner.parseTokenInput(saved)
+                } catch (_: Exception) {
+                    null
+                }
+            }
+        }
     }
 
     private fun loadCatalog() {

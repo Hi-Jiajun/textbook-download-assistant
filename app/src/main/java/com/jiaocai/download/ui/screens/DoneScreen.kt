@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -31,7 +32,7 @@ fun DoneScreen(
     onOpenLibrary: () -> Unit,
 ) {
     val context = LocalContext.current
-    Column(Modifier.fillMaxSize().padding(24.dp)) {
+    Column(Modifier.fillMaxSize().safeDrawingPadding().padding(24.dp)) {
         Text("下载完成", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
         Spacer(Modifier.height(12.dp))
 

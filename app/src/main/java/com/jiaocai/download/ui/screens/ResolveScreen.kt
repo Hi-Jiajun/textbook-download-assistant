@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -29,7 +30,7 @@ fun ResolveScreen(
     onDownload: () -> Unit,
     onBack: () -> Unit,
 ) {
-    Column(Modifier.fillMaxSize().padding(24.dp)) {
+    Column(Modifier.fillMaxSize().safeDrawingPadding().padding(24.dp)) {
         Text("解析结果", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(12.dp))
 
