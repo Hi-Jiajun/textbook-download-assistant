@@ -65,6 +65,12 @@ class LibraryStore(private val context: Context) {
                     .put("addedAt", it.addedAt)
             )
         }
-        file.writeText(arr.toString())
+        // 先写临时文件再改名，避免写入过程中被杀进程导致 library.json 损坏。
+        val tmp = File(file.parentFile, file.name + ".tmp")
+        tmp.writeText(arr.toString())
+        if (!tmp.renameTo(file)) {
+            tmp.copyTo(file, overwrite = true)
+            tmp.delete()
+        }
     }
 }
