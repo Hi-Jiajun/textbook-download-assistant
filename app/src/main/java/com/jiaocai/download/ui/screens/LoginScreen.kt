@@ -2,6 +2,7 @@
 
 package com.jiaocai.download.ui.screens
 
+import android.annotation.SuppressLint
 import android.view.ViewGroup
 import android.webkit.CookieManager
 import android.webkit.WebResourceRequest
@@ -90,6 +91,7 @@ private fun clearWebViewSession(webView: WebView) {
  * 登录并获取下载凭据。内嵌官网登录页（自动抓取 token），并提供手动粘贴兜底。
  * 登录成功后回跳官网首页时会被拦截：先从 auth 域把 token 取走，避免跳到首页。
  */
+@SuppressLint("SetJavaScriptEnabled") // 官方登录页必须启用 JS；页面限定在 https 的 auth 域内。
 @Composable
 fun LoginScreen(
     hint: String,
@@ -122,6 +124,9 @@ fun LoginScreen(
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             settings.javaScriptCanOpenWindowsAutomatically = true
+            // 登录页只需要访问 https 站点，关闭本地文件/内容访问，缩小攻击面。
+            settings.allowFileAccess = false
+            settings.allowContentAccess = false
             webViewClient = object : WebViewClient() {
                 private fun intercept(view: WebView, url: String): Boolean {
                     // 登录成功后离开 auth 域的跳转（官网首页/手机版首页等）：先从当前 auth 页抓 token，再阻止跳转。

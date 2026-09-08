@@ -14,6 +14,8 @@ import com.jiaocai.download.data.TokenStore
 import com.jiaocai.download.model.ResourceInfo
 import com.jiaocai.download.model.SavedItem
 import com.jiaocai.download.model.Textbook
+import coil.imageLoader
+import coil.request.ImageRequest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -82,12 +84,12 @@ class DownloadViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private fun loadCatalog() {
+    private fun loadCatalog(forceRefresh: Boolean = false) {
         if (_state.value.catalogLoading) return
         _state.value = _state.value.copy(catalogLoading = true, catalogError = null)
         viewModelScope.launch {
             try {
-                val books = CatalogApi.fetchTextbooks()
+                val books = CatalogApi.fetchTextbooks(getApplication(), forceRefresh)
                 val (stages, subjects, versions) = withContext(Dispatchers.Default) {
                     Triple(
                         books.map { it.stage }.filter { it.isNotBlank() }.distinct().sorted(),
@@ -102,6 +104,7 @@ class DownloadViewModel(app: Application) : AndroidViewModel(app) {
                     filterVersions = versions,
                     catalogLoading = false,
                 )
+                prefetchCoverThumbnails(books)
             } catch (e: Exception) {
                 _state.value = _state.value.copy(
                     catalogLoading = false,
@@ -111,7 +114,26 @@ class DownloadViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun refreshCatalog() = loadCatalog()
+    /** 预取首屏前几张封面，缓解第一次快速滑动的卡顿；失败不影响主流程。 */
+    private fun prefetchCoverThumbnails(books: List<Textbook>) {
+        val loader = getApplication<Application>().imageLoader
+        books.asSequence()
+            .mapNotNull { it.thumb?.takeIf(String::isNotBlank) }
+            .distinct()
+            .take(12)
+            .forEach { url ->
+                runCatching {
+                    loader.enqueue(
+                        ImageRequest.Builder(getApplication())
+                            .data(url)
+                            .size(256)
+                            .build(),
+                    )
+                }
+            }
+    }
+
+    fun refreshCatalog() = loadCatalog(forceRefresh = true)
 
     fun setQuery(value: String) { _state.value = _state.value.copy(query = value) }
     fun setStageFilter(value: String) {

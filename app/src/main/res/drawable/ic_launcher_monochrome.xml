@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 主题图标（Android 13+）：系统会统一着色，这里只提供形状。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 打开的书，中间挖出圆形给下载箭头 -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillType="evenOdd"
+        tools:ignore="UnusedAttribute"
+        android:pathData="M52,34 C46,29.5 38,27.5 30,27.5 L30,73 C38,73 46,75 52,79 Z M56,34 C62,29.5 70,27.5 78,27.5 L78,73 C70,73 62,75 56,79 Z M54,56 m-11,0 a11,11 0 1,0 22,0 a11,11 0 1,0 -22,0 Z" />
+
+    <!-- 下载箭头 -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M51.5,46 L56.5,46 L56.5,54 L60,54 L54,61 L48,54 L51.5,54 Z" />
+</vector>

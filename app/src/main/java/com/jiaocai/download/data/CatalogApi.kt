@@ -1,15 +1,18 @@
 package com.jiaocai.download.data
 
+import android.content.Context
 import android.util.JsonReader
 import android.util.JsonToken
 import com.jiaocai.download.model.Textbook
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
+import java.io.File
 import java.util.concurrent.TimeUnit
 
 /**
@@ -25,6 +28,9 @@ object CatalogApi {
     private const val DATA_VERSION =
         "https://s-file-1.ykt.cbern.com.cn/zxx/ndrs/resources/tch_material/version/data_version.json"
 
+    /** 目录缓存有效期：12 小时。期间再次启动直接读本地缓存，省流量也更快。 */
+    private const val CACHE_TTL_MS = 12 * 60 * 60 * 1000L
+
     private val client = OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)
         .readTimeout(120, TimeUnit.SECONDS)
@@ -38,8 +44,29 @@ object CatalogApi {
 
     class CatalogException(message: String) : Exception(message)
 
-    /** 拉取全部电子教材（去重）。目录接口公开、无需登录。 */
-    suspend fun fetchTextbooks(): List<Textbook> = withContext(Dispatchers.IO) {
+    /**
+     * 拉取全部电子教材（去重）。目录接口公开、无需登录。
+     * 优先读本地缓存；缓存过期或强制刷新时才联网，成功后原子写回缓存。
+     */
+    suspend fun fetchTextbooks(context: Context, forceRefresh: Boolean = false): List<Textbook> =
+        withContext(Dispatchers.IO) {
+            val cache = File(context.filesDir, "catalog_cache.jsonl")
+            if (!forceRefresh && isCacheFresh(cache)) {
+                runCatching { readCache(cache) }
+                    .getOrNull()
+                    ?.takeIf { it.isNotEmpty() }
+                    ?.let { return@withContext it }
+            }
+            val books = fetchFromNetwork()
+            runCatching { writeCache(cache, books) }
+            books
+        }
+
+    private fun isCacheFresh(cache: File): Boolean =
+        cache.isFile && System.currentTimeMillis() - cache.lastModified() < CACHE_TTL_MS
+
+    /** 从平台接口拉取并解析全部教材。 */
+    private suspend fun fetchFromNetwork(): List<Textbook> {
         val version = JSONObject(getText(DATA_VERSION))
         val urls = version.optString("urls")
             .split(",")
@@ -48,8 +75,55 @@ object CatalogApi {
         if (urls.isEmpty()) throw CatalogException("未获取到教材清单。")
 
         // 并发拉取各清单文件，缩短等待时间
-        val lists = urls.map { url -> async(Dispatchers.IO) { parseBookList(url) } }.awaitAll()
-        lists.flatten().distinctBy { it.id }
+        val lists = coroutineScope {
+            urls.map { url -> async(Dispatchers.IO) { parseBookList(url) } }.awaitAll()
+        }
+        return lists.flatten().distinctBy { it.id }
+    }
+
+    /** 缓存为 JSONL（每行一本），流式读写在旧机型上内存占用更小。 */
+    internal fun readCache(cache: File): List<Textbook> {
+        val out = mutableListOf<Textbook>()
+        cache.forEachLine { line ->
+            if (line.isBlank()) return@forEachLine
+            val o = JSONObject(line)
+            out.add(
+                Textbook(
+                    id = o.getString("id"),
+                    title = o.optString("title"),
+                    stage = o.optString("stage"),
+                    subject = o.optString("subject"),
+                    version = o.optString("version"),
+                    grade = o.optString("grade"),
+                    volume = o.optString("volume"),
+                    thumb = o.optString("thumb").takeIf { it.isNotBlank() },
+                ),
+            )
+        }
+        return out
+    }
+
+    internal fun writeCache(cache: File, books: List<Textbook>) {
+        val tmp = File(cache.parentFile, cache.name + ".tmp")
+        tmp.bufferedWriter(Charsets.UTF_8).use { writer ->
+            books.forEach { b ->
+                val o = JSONObject()
+                    .put("id", b.id)
+                    .put("title", b.title)
+                    .put("stage", b.stage)
+                    .put("subject", b.subject)
+                    .put("version", b.version)
+                    .put("grade", b.grade)
+                    .put("volume", b.volume)
+                if (!b.thumb.isNullOrBlank()) o.put("thumb", b.thumb)
+                writer.write(o.toString())
+                writer.newLine()
+            }
+        }
+        if (!tmp.renameTo(cache)) {
+            tmp.copyTo(cache, overwrite = true)
+            tmp.delete()
+        }
     }
 
     /** 流式解析一个清单文件里的教材。 */

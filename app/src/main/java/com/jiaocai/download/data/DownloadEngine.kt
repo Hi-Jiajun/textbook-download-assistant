@@ -46,18 +46,31 @@ class DownloadEngine(private val context: Context) {
             dir.mkdirs()
             val ext = if (resource.format.isBlank()) "pdf" else resource.format
             val out = File(dir, sanitize(resource.title) + "." + ext)
-
-            body.byteStream().use { input ->
-                out.outputStream().use { output ->
-                    val buffer = ByteArray(64 * 1024)
-                    var read: Int
-                    var done = 0L
-                    while (input.read(buffer).also { read = it } != -1) {
-                        output.write(buffer, 0, read)
-                        done += read
-                        onProgress(done, total)
+            // 先写 .part 临时文件，完整落盘后再原子改名，避免下载中断留下半截文件。
+            val part = File(dir, out.name + ".part")
+            try {
+                body.byteStream().use { input ->
+                    part.outputStream().use { output ->
+                        val buffer = ByteArray(64 * 1024)
+                        var read: Int
+                        var done = 0L
+                        while (input.read(buffer).also { read = it } != -1) {
+                            output.write(buffer, 0, read)
+                            done += read
+                            onProgress(done, total)
+                        }
+                        output.flush()
+                        output.fd.sync()
                     }
                 }
+                if (!part.renameTo(out)) {
+                    // 极少数文件系统不支持覆盖式改名时回退为复制。
+                    part.copyTo(out, overwrite = true)
+                    part.delete()
+                }
+            } catch (e: Exception) {
+                part.delete()
+                throw e
             }
             out
         }
