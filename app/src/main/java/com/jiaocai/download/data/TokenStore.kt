@@ -45,7 +45,7 @@ class TokenStore(private val context: Context) {
         val stored = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             encrypt(token)
         } else {
-            PLAIN_PREFIX + Base64.encodeToString(token.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
+            encodeFallback(token)
         }
         context.credentialsDataStore.edit { it[key] = stored }
     }
@@ -62,12 +62,8 @@ class TokenStore(private val context: Context) {
     suspend fun load(): String? {
         val stored = context.credentialsDataStore.data.first()[key] ?: return null
         return try {
-            when {
-                stored.startsWith(PLAIN_PREFIX) ->
-                    String(Base64.decode(stored.removePrefix(PLAIN_PREFIX), Base64.NO_WRAP), Charsets.UTF_8)
-                Build.VERSION.SDK_INT >= Build.VERSION_CODES.M -> decrypt(stored)
-                else -> null
-            }
+            decodeFallback(stored)
+                ?: if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) decrypt(stored) else null
         } catch (_: Exception) {
             null
         }
@@ -87,10 +83,22 @@ class TokenStore(private val context: Context) {
         context.credentialsDataStore.edit { it.remove(key) }
     }
 
-    private companion object {
+    internal companion object {
         const val ALIAS = "textbook_token_key"
         const val IV_LEN = 12
         const val TAG_BITS = 128
         const val PLAIN_PREFIX = "plain:"
+
+        /** Android 5.0/5.1 降级存储：Base64 编码，前缀标记格式。 */
+        fun encodeFallback(token: String): String =
+            PLAIN_PREFIX + Base64.encodeToString(token.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
+
+        /** 解析降级存储；不是该格式时返回 null，交给 Keystore 解密分支处理。 */
+        fun decodeFallback(stored: String): String? {
+            if (!stored.startsWith(PLAIN_PREFIX)) return null
+            return runCatching {
+                String(Base64.decode(stored.removePrefix(PLAIN_PREFIX), Base64.NO_WRAP), Charsets.UTF_8)
+            }.getOrNull()
+        }
     }
 }
