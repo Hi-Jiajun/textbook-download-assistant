@@ -3,6 +3,7 @@
 package com.jiaocai.download.ui.screens
 
 import android.view.ViewGroup
+import android.webkit.CookieManager
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.layout.Arrangement
@@ -38,11 +39,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.suspendCancellableCoroutine
 
-// 直接加载官方统一身份认证登录页，登录成功回跳 basic 域以便读取 localStorage 中的登录凭据。
-private const val LOGIN_URL =
-    "https://auth.smartedu.cn/uias/login?service=https%3A%2F%2Fbasic.smartedu.cn%2F"
-// 给用户看的登录地址（不含内部 service 参数）。
-private const val LOGIN_URL_DISPLAY = "https://auth.smartedu.cn/uias/login"
+// 直接加载官方统一身份认证登录页，登录后凭据写入 auth 域 localStorage 的 ND_UC_AUTH-*&token。
+// 这里不带 service，避免登录成功后回跳 basic.smartedu.cn 官方首页。
+private const val LOGIN_URL = "https://auth.smartedu.cn/uias/login"
 
 private const val EXTRACT_JS = """
 (function () {
@@ -52,7 +51,15 @@ private const val EXTRACT_JS = """
     );
     if (!authKey) return "__NO_TOKEN__";
     const tokenData = JSON.parse(localStorage.getItem(authKey));
-    const cred = tokenData.cred || tokenData;
+    let cred = null;
+    if (tokenData && typeof tokenData.value === "string") {
+      cred = JSON.parse(tokenData.value);
+    } else if (tokenData && tokenData.cred) {
+      cred = tokenData.cred;
+    } else if (tokenData) {
+      cred = tokenData;
+    }
+    if (!cred) return "__NO_TOKEN__";
     const access_token = cred.access_token;
     const mac_key = cred.mac_key;
     const diff = cred.diff;
@@ -95,6 +102,16 @@ fun LoginScreen(
     var showManual by remember { mutableStateOf(false) }
     var manualJson by remember { mutableStateOf("") }
 
+    // 退出登录：同时清掉 WebView 里保留的登录态（localStorage + cookie），
+    // 否则重新加载登录页时会立刻把旧的 token 识别回来，导致「退出不了」。
+    val handleLogout = {
+        webView.evaluateJavascript("localStorage.clear();", null)
+        CookieManager.getInstance().removeAllCookies(null)
+        CookieManager.getInstance().flush()
+        webView.clearHistory()
+        onLogout()
+    }
+
     LaunchedEffect(webView) {
         while (isActive) {
             val raw = suspendCancellableCoroutine { cont ->
@@ -122,7 +139,7 @@ fun LoginScreen(
         Surface(color = MaterialTheme.colorScheme.primaryContainer) {
             Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
                 Text("登录 国家中小学智慧教育平台", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                Text(LOGIN_URL_DISPLAY, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                Text(LOGIN_URL, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
                 Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
                 if (error != null) Text(error, color = MaterialTheme.colorScheme.error)
             }
@@ -139,7 +156,7 @@ fun LoginScreen(
             if (loggedIn) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                     OutlinedButton(onClick = { webView.reload() }, modifier = Modifier.weight(1f)) { Text("重新登录") }
-                    OutlinedButton(onClick = onLogout, modifier = Modifier.weight(1f)) { Text("退出登录") }
+                    OutlinedButton(onClick = handleLogout, modifier = Modifier.weight(1f)) { Text("退出登录") }
                 }
                 Spacer(Modifier.height(8.dp))
             }
@@ -149,7 +166,7 @@ fun LoginScreen(
             if (showManual) {
                 Column(Modifier.verticalScroll(rememberScrollState())) {
                     Text(
-                        "在浏览器打开 $LOGIN_URL_DISPLAY 并登录，按 F12 → 控制台，用取凭据脚本复制出整段 JSON 粘到下面；格式为 { access_token, mac_key, diff }。",
+                        "在浏览器打开 $LOGIN_URL 并登录，按 F12 → 控制台，用取凭据脚本复制出整段 JSON 粘到下面；格式为 { access_token, mac_key, diff }。",
                         style = MaterialTheme.typography.bodySmall,
                     )
                     Spacer(Modifier.height(6.dp))

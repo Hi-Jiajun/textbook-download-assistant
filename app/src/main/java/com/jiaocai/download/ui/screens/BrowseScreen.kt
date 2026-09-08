@@ -38,6 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -45,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import com.jiaocai.download.model.Textbook
 import com.jiaocai.download.ui.DownloadViewModel
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import kotlin.math.absoluteValue
 
 /** 第一步：浏览并勾选要下载的教材。 */
@@ -179,7 +181,12 @@ private fun TextbookCard(book: Textbook, selected: Boolean, onToggle: () -> Unit
                 Text(book.subject.take(1).ifEmpty { "书" }, color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
                 if (book.thumb != null) {
                     AsyncImage(
-                        model = book.thumb,
+                        // 下采样到小尺寸再显示，避免为 46dp 图标加载约 1MB 的原始封面图
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(book.thumb)
+                            .size(256)
+                            .crossfade(true)
+                            .build(),
                         contentDescription = book.title,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize(),

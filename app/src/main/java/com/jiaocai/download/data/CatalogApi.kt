@@ -91,7 +91,8 @@ object CatalogApi {
                 "title" -> title = readString(reader)
                 "name" -> if (title.isBlank()) title = readString(reader) else reader.skipValue()
                 "tag_paths" -> hasTagPath = readTagPath(reader)
-                "thumbnails" -> thumb = readThumb(reader)
+                "thumbnails" -> if (thumb == null) thumb = readArrayFirstString(reader) else reader.skipValue()
+                "custom_properties" -> if (thumb == null) thumb = readCustomPropertiesThumb(reader) else reader.skipValue()
                 "tag_list" -> {
                     reader.beginArray()
                     while (reader.hasNext()) {
@@ -126,8 +127,8 @@ object CatalogApi {
         return Textbook(id, title, stage, subject, version, grade, volume, thumb)
     }
 
-    /** 读取 thumbnails 数组，返回第一个非空字符串。 */
-    private fun readThumb(reader: JsonReader): String? {
+    /** 读取 JSON 字符串数组，返回第一个非空字符串（封面预览地址）。 */
+    private fun readArrayFirstString(reader: JsonReader): String? {
         return if (reader.peek() == JsonToken.BEGIN_ARRAY) {
             reader.beginArray()
             var t: String? = null
@@ -141,6 +142,47 @@ object CatalogApi {
             reader.skipValue()
             null
         }
+    }
+
+    /**
+     * 教材的封面图存放在 custom_properties.thumbnails（数组），
+     * 个别条目可能没有 thumbnails，此时回退到 custom_properties.preview 中的第一张图（Slide1）。
+     */
+    private fun readCustomPropertiesThumb(reader: JsonReader): String? {
+        var t: String? = null
+        reader.beginObject()
+        while (reader.hasNext()) {
+            when (reader.nextName()) {
+                "thumbnails" -> if (t == null) t = readArrayFirstString(reader) else reader.skipValue()
+                "preview" -> if (t == null) t = readPreviewFirst(reader) else reader.skipValue()
+                else -> reader.skipValue()
+            }
+        }
+        reader.endObject()
+        return t
+    }
+
+    /** 读取 custom_properties.preview（{Slide1: url, ...} 形式的对象），优先返回 Slide1。 */
+    private fun readPreviewFirst(reader: JsonReader): String? {
+        if (reader.peek() != JsonToken.BEGIN_OBJECT) {
+            reader.skipValue()
+            return null
+        }
+        reader.beginObject()
+        var t: String? = null
+        var slide1: String? = null
+        while (reader.hasNext()) {
+            val name = reader.nextName()
+            if (reader.peek() == JsonToken.STRING) {
+                val value = reader.nextString().takeIf { it.isNotBlank() }
+                if (name == "Slide1") slide1 = value
+                if (t == null) t = value
+            } else {
+                reader.skipValue()
+            }
+        }
+        reader.endObject()
+        return slide1 ?: t
     }
 
     /** 安全读取字符串字段：若非字符串（null/数字/数组…）则跳过并返回空串。 */
