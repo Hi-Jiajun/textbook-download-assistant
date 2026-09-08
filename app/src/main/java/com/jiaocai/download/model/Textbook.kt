@@ -9,4 +9,5 @@ data class Textbook(
     val version: String,  // 版别（人教版/统编版…）
     val grade: String,    // 年级（一年级…）
     val volume: String,   // 册次（上册/下册…）
+    val thumb: String? = null, // 封面预览图 URL
 )

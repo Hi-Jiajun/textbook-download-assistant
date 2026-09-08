@@ -37,12 +37,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.jiaocai.download.model.Textbook
 import com.jiaocai.download.ui.DownloadViewModel
+import coil.compose.AsyncImage
 import kotlin.math.absoluteValue
 
 /** 第一步：浏览并勾选要下载的教材。 */
@@ -53,6 +55,20 @@ fun BrowseScreen(
     onOpenLibrary: () -> Unit,
     onOpenCredentials: () -> Unit,
 ) {
+    // 级联：学科依赖已选学段，版本依赖已选学段+学科
+    val subjectOptions = remember(state.textbooks, state.stageFilter) {
+        val base = if (state.stageFilter.isBlank()) state.textbooks
+        else state.textbooks.filter { it.stage == state.stageFilter }
+        base.map { it.subject }.filter { it.isNotBlank() }.distinct().sorted()
+    }
+    val versionOptions = remember(state.textbooks, state.stageFilter, state.subjectFilter) {
+        state.textbooks
+            .filter {
+                (state.stageFilter.isBlank() || it.stage == state.stageFilter) &&
+                    (state.subjectFilter.isBlank() || it.subject == state.subjectFilter)
+            }
+            .map { it.version }.filter { it.isNotBlank() }.distinct().sorted()
+    }
     val filtered = remember(state.textbooks, state.query, state.stageFilter, state.subjectFilter, state.versionFilter) {
         state.textbooks.filter { b ->
             (state.stageFilter.isBlank() || b.stage == state.stageFilter) &&
@@ -102,8 +118,8 @@ fun BrowseScreen(
             Spacer(Modifier.height(8.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterDropdown("学段", state.filterStages, state.stageFilter, viewModel::setStageFilter, Modifier.weight(1f))
-                FilterDropdown("学科", state.filterSubjects, state.subjectFilter, viewModel::setSubjectFilter, Modifier.weight(1f))
-                FilterDropdown("版本", state.filterVersions, state.versionFilter, viewModel::setVersionFilter, Modifier.weight(1f))
+                FilterDropdown("学科", subjectOptions, state.subjectFilter, viewModel::setSubjectFilter, Modifier.weight(1f))
+                FilterDropdown("版本", versionOptions, state.versionFilter, viewModel::setVersionFilter, Modifier.weight(1f))
             }
             Spacer(Modifier.height(8.dp))
         }
@@ -161,6 +177,14 @@ private fun TextbookCard(book: Textbook, selected: Boolean, onToggle: () -> Unit
                 contentAlignment = Alignment.Center,
             ) {
                 Text(book.subject.take(1).ifEmpty { "书" }, color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                if (book.thumb != null) {
+                    AsyncImage(
+                        model = book.thumb,
+                        contentDescription = book.title,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
             }
             Column(Modifier.weight(1f).padding(start = 12.dp)) {
                 Text(book.title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis)

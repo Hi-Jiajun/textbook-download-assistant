@@ -80,6 +80,7 @@ object CatalogApi {
         var version = ""
         var grade = ""
         var volume = ""
+        var thumb: String? = null
         var hasTagPath = false
 
         reader.beginObject()
@@ -90,6 +91,7 @@ object CatalogApi {
                 "title" -> title = readString(reader)
                 "name" -> if (title.isBlank()) title = readString(reader) else reader.skipValue()
                 "tag_paths" -> hasTagPath = readTagPath(reader)
+                "thumbnails" -> thumb = readThumb(reader)
                 "tag_list" -> {
                     reader.beginArray()
                     while (reader.hasNext()) {
@@ -121,7 +123,24 @@ object CatalogApi {
 
         if (!hasTagPath || id.isBlank()) return null
         if (title.isBlank()) title = "(未命名教材)"
-        return Textbook(id, title, stage, subject, version, grade, volume)
+        return Textbook(id, title, stage, subject, version, grade, volume, thumb)
+    }
+
+    /** 读取 thumbnails 数组，返回第一个非空字符串。 */
+    private fun readThumb(reader: JsonReader): String? {
+        return if (reader.peek() == JsonToken.BEGIN_ARRAY) {
+            reader.beginArray()
+            var t: String? = null
+            while (reader.hasNext()) {
+                if (t == null && reader.peek() == JsonToken.STRING) t = reader.nextString()
+                else reader.skipValue()
+            }
+            reader.endArray()
+            t?.takeIf { it.isNotBlank() }
+        } else {
+            reader.skipValue()
+            null
+        }
     }
 
     /** 安全读取字符串字段：若非字符串（null/数字/数组…）则跳过并返回空串。 */

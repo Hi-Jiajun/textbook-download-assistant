@@ -70,5 +70,8 @@ dependencies {
     // PDF 书签写入（上游 pypdf 的 Android 等价实现）
     implementation("com.tom-roush:pdfbox-android:2.0.27.0")
 
+    // 封面缩略图加载
+    implementation("io.coil-kt:coil-compose:2.7.0")
+
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

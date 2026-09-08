@@ -33,7 +33,9 @@ fun App(viewModel: DownloadViewModel = viewModel()) {
                     DownloadViewModel.Step.LOGIN -> LoginScreen(
                         hint = state.loginHint,
                         error = state.error,
+                        loggedIn = state.loggedIn,
                         onToken = viewModel::onTokenCaptured,
+                        onLogout = viewModel::logout,
                         onBack = { viewModel.go(DownloadViewModel.Step.BROWSE) },
                     )
                     DownloadViewModel.Step.RESOLVE -> ResolveScreen(

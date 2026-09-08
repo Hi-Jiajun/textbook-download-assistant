@@ -113,8 +113,12 @@ class DownloadViewModel(app: Application) : AndroidViewModel(app) {
     fun refreshCatalog() = loadCatalog()
 
     fun setQuery(value: String) { _state.value = _state.value.copy(query = value) }
-    fun setStageFilter(value: String) { _state.value = _state.value.copy(stageFilter = value) }
-    fun setSubjectFilter(value: String) { _state.value = _state.value.copy(subjectFilter = value) }
+    fun setStageFilter(value: String) {
+        _state.value = _state.value.copy(stageFilter = value, subjectFilter = "", versionFilter = "")
+    }
+    fun setSubjectFilter(value: String) {
+        _state.value = _state.value.copy(subjectFilter = value, versionFilter = "")
+    }
     fun setVersionFilter(value: String) { _state.value = _state.value.copy(versionFilter = value) }
 
     fun toggleSelect(id: String) {
@@ -137,6 +141,18 @@ class DownloadViewModel(app: Application) : AndroidViewModel(app) {
             step = Step.LOGIN,
             error = null,
             loginHint = if (credentials != null) "当前已是登录状态，可重新登录或手动更新凭据。" else "请登录国家中小学智慧教育平台账号，或手动粘贴凭据。",
+        )
+    }
+
+    /** 退出登录：清除本地保存的凭据并重置登录状态。 */
+    fun logout() {
+        credentials = null
+        pendingDownload = false
+        viewModelScope.launch { tokenStore.clear() }
+        _state.value = _state.value.copy(
+            loggedIn = false,
+            loginHint = "已退出登录。可重新登录或手动粘贴凭据。",
+            error = null,
         )
     }
 
