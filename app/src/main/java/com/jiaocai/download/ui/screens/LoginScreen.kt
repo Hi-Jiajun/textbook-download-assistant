@@ -38,7 +38,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.suspendCancellableCoroutine
 
-private const val LOGIN_URL = "https://basic.smartedu.cn"
+// 直接加载官方统一身份认证登录页，登录成功回跳 basic 域以便读取 localStorage 中的登录凭据。
+private const val LOGIN_URL =
+    "https://auth.smartedu.cn/uias/login?service=https%3A%2F%2Fbasic.smartedu.cn%2F"
+// 给用户看的登录地址（不含内部 service 参数）。
+private const val LOGIN_URL_DISPLAY = "https://auth.smartedu.cn/uias/login"
 
 private const val EXTRACT_JS = """
 (function () {
@@ -49,7 +53,12 @@ private const val EXTRACT_JS = """
     if (!authKey) return "__NO_TOKEN__";
     const tokenData = JSON.parse(localStorage.getItem(authKey));
     const cred = tokenData.cred || tokenData;
-    return { access_token: cred.access_token, mac_key: cred.mac_key, diff: cred.diff };
+    const access_token = cred.access_token;
+    const mac_key = cred.mac_key;
+    const diff = cred.diff;
+    const hasAll = access_token && mac_key && diff !== undefined && diff !== null && diff !== "";
+    if (hasAll) return { access_token: access_token, mac_key: mac_key, diff: diff };
+    return "__NO_TOKEN__";
   } catch (e) {
     return "__NO_TOKEN__";
   }
@@ -113,7 +122,7 @@ fun LoginScreen(
         Surface(color = MaterialTheme.colorScheme.primaryContainer) {
             Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
                 Text("登录 国家中小学智慧教育平台", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                Text("$LOGIN_URL", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                Text(LOGIN_URL_DISPLAY, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
                 Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
                 if (error != null) Text(error, color = MaterialTheme.colorScheme.error)
             }
@@ -140,7 +149,7 @@ fun LoginScreen(
             if (showManual) {
                 Column(Modifier.verticalScroll(rememberScrollState())) {
                     Text(
-                        "在浏览器打开 $LOGIN_URL 并登录，按 F12 → 控制台，用取凭据脚本复制出整段 JSON 粘到下面；格式为 { access_token, mac_key, diff }。",
+                        "在浏览器打开 $LOGIN_URL_DISPLAY 并登录，按 F12 → 控制台，用取凭据脚本复制出整段 JSON 粘到下面；格式为 { access_token, mac_key, diff }。",
                         style = MaterialTheme.typography.bodySmall,
                     )
                     Spacer(Modifier.height(6.dp))
