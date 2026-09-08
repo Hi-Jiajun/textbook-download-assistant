@@ -1,5 +1,6 @@
 package com.jiaocai.download.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,9 +13,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -22,8 +27,8 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -107,39 +112,50 @@ fun BrowseScreen(
     }
 
     Column(Modifier.fillMaxSize().safeDrawingPadding()) {
-        // 品牌顶栏
-        Surface(color = MaterialTheme.colorScheme.primaryContainer) {
+        // 品牌顶栏（圆润底部）
+        Surface(
+            color = MaterialTheme.colorScheme.primaryContainer,
+            shape = RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp),
+        ) {
             Row(
-                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+                Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 18.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column {
                     Text("教材下载助手", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(2.dp))
                     Text("选择需要的教材，一键离线下载", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     TextButton(onClick = onOpenCredentials) {
-                        Text(if (state.loggedIn) "已登录" else "登录", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            if (state.loggedIn) "已登录" else "登录",
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
                     }
-                    TextButton(onClick = onOpenLibrary) { Text("课本库", fontWeight = FontWeight.SemiBold) }
+                    TextButton(onClick = onOpenLibrary) {
+                        Text("课本库", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+                    }
                 }
             }
         }
 
         // 搜索 + 筛选
-        Column(Modifier.padding(horizontal = 16.dp)) {
-            Spacer(Modifier.height(12.dp))
+        Column(Modifier.padding(horizontal = 20.dp)) {
+            Spacer(Modifier.height(16.dp))
             OutlinedTextField(
                 value = state.query,
                 onValueChange = viewModel::setQuery,
                 modifier = Modifier.fillMaxWidth(),
                 placeholder = { Text("搜索书名 / 学科 / 年级") },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                 singleLine = true,
-                shape = RoundedCornerShape(14.dp),
+                shape = RoundedCornerShape(16.dp),
             )
-            Spacer(Modifier.height(8.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Spacer(Modifier.height(12.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 FilterDropdown("学段", state.filterStages, state.stageFilter, viewModel::setStageFilter, Modifier.weight(1f))
                 FilterDropdown("学科", subjectOptions, state.subjectFilter, viewModel::setSubjectFilter, Modifier.weight(1f))
                 FilterDropdown("版本", versionOptions, state.versionFilter, viewModel::setVersionFilter, Modifier.weight(1f))
@@ -148,7 +164,7 @@ fun BrowseScreen(
         }
 
         // 列表
-        Box(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 16.dp)) {
+        Box(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 20.dp)) {
             when {
                 state.catalogLoading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
                 state.textbooks.isEmpty() -> Column(
@@ -159,7 +175,7 @@ fun BrowseScreen(
                     TextButton(onClick = viewModel::refreshCatalog) { Text("重试") }
                 }
                 filtered.isEmpty() -> Text("没有符合筛选条件的教材", Modifier.align(Alignment.Center))
-                else -> LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                else -> LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     items(filtered, key = { it.id }) { b ->
                         TextbookCard(
                             book = b,
@@ -171,16 +187,20 @@ fun BrowseScreen(
             }
         }
 
-        // 底部
+        // 底部去下载
         val n = state.selectedIds.size
-        Surface(color = MaterialTheme.colorScheme.surface) {
+        Surface(color = MaterialTheme.colorScheme.surface, shadowElevation = 8.dp) {
             Button(
                 onClick = viewModel::startDownload,
                 enabled = n > 0 && !state.catalogLoading,
-                modifier = Modifier.fillMaxWidth().padding(16.dp),
-                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp).height(54.dp),
+                shape = RoundedCornerShape(18.dp),
             ) {
-                Text(if (n > 0) "去下载（$n）" else "请先勾选教材", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    if (n > 0) "去下载（$n）" else "请先勾选教材",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
             }
         }
     }
@@ -191,18 +211,19 @@ private fun TextbookCard(book: Textbook, selected: Boolean, onToggle: () -> Unit
     Card(
         onClick = onToggle,
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.12f)),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {
-        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(
-                Modifier.size(width = 54.dp, height = 74.dp).clip(RoundedCornerShape(8.dp)).background(coverColor(book.subject)),
+                Modifier.size(width = 58.dp, height = 80.dp).clip(RoundedCornerShape(12.dp)).background(coverColor(book.subject)),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(book.subject.take(1).ifEmpty { "书" }, color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
                 if (book.thumb != null) {
                     AsyncImage(
-                        // 下采样到小尺寸再显示，避免为 46dp 图标加载约 1MB 的原始封面图
                         model = ImageRequest.Builder(LocalContext.current)
                             .data(book.thumb)
                             .size(256)
@@ -214,8 +235,9 @@ private fun TextbookCard(book: Textbook, selected: Boolean, onToggle: () -> Unit
                     )
                 }
             }
-            Column(Modifier.weight(1f).padding(start = 12.dp)) {
-                Text(book.title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
+                Text(book.title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Spacer(Modifier.height(4.dp))
                 val meta = listOf(book.stage, book.subject, book.version, book.grade, book.volume)
                     .filter { it.isNotBlank() }.distinct().joinToString(" · ")
                 if (meta.isNotBlank()) {
@@ -237,8 +259,27 @@ private fun FilterDropdown(
 ) {
     var expanded by remember { mutableStateOf(false) }
     Box(modifier) {
-        OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
-            Text(if (selected.isBlank()) label else selected, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Surface(
+            onClick = { expanded = true },
+            shape = RoundedCornerShape(14.dp),
+            color = if (selected.isBlank()) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.primaryContainer,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.1f)),
+        ) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+            ) {
+                Text(
+                    if (selected.isBlank()) label else selected,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Spacer(Modifier.width(2.dp))
+                Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
         DropdownMenu(expanded, onDismissRequest = { expanded = false }) {
             DropdownMenuItem(text = { Text("全部") }, onClick = { onSelect(""); expanded = false })

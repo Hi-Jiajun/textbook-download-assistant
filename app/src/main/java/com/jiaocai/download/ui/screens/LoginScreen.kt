@@ -45,8 +45,8 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 // 官方统一身份认证登录页。登录成功后会回跳 basic.smartedu.cn（官网首页），
 // 这里由 WebViewClient 拦截该回跳，并直接从 auth 域 localStorage 取走登录凭据，避免进入官网首页。
 private const val LOGIN_URL = "https://auth.smartedu.cn/uias/login"
-// 登录成功后 CAS 会跳转到的官方首页域名前缀。
-private const val HOME_URL_PREFIX = "https://basic.smartedu.cn"
+// 认证域前缀：登录成功后任何离开 auth 域的跳转都是无需展示的回跳，直接拦截。
+private const val LOGIN_URL_PREFIX = "https://auth.smartedu.cn"
 
 private const val EXTRACT_JS = """
 (function () {
@@ -124,8 +124,8 @@ fun LoginScreen(
             settings.javaScriptCanOpenWindowsAutomatically = true
             webViewClient = object : WebViewClient() {
                 private fun intercept(view: WebView, url: String): Boolean {
-                    // 登录成功后回跳官网首页：先从当前（auth）页抓 token，再阻止跳转。
-                    if (url.startsWith(HOME_URL_PREFIX)) {
+                    // 登录成功后离开 auth 域的跳转（官网首页/手机版首页等）：先从当前 auth 页抓 token，再阻止跳转。
+                    if (!url.startsWith(LOGIN_URL_PREFIX)) {
                         view.evaluateJavascript(EXTRACT_JS) { value -> onTokenOnce(value) }
                         return true
                     }

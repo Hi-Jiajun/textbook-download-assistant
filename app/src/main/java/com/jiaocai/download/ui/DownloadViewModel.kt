@@ -1,6 +1,7 @@
 package com.jiaocai.download.ui
 
 import android.app.Application
+import android.widget.Toast
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.jiaocai.download.data.AuthSigner
@@ -180,15 +181,29 @@ class DownloadViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             try {
                 val cred = AuthSigner.parseTokenInput(json)
+                val wasLoggedIn = credentials != null
                 credentials = cred
                 tokenStore.save(json)
-                _state.value = _state.value.copy(loggedIn = true)
                 if (pendingDownload) {
                     val selected = _state.value.textbooks.filter { it.id in _state.value.selectedIds }
-                    _state.value = _state.value.copy(error = null)
+                    _state.value = _state.value.copy(loggedIn = true, error = null)
                     beginResolveDownload(selected)
+                } else if (!wasLoggedIn) {
+                    // 全新登录：提示成功并直接返回首页，避免停留在登录页或看到官网首页。
+                    Toast.makeText(getApplication(), "登录成功", Toast.LENGTH_SHORT).show()
+                    _state.value = _state.value.copy(
+                        loggedIn = true,
+                        step = Step.BROWSE,
+                        loginHint = "登录成功，凭据已保存。",
+                        error = null,
+                    )
                 } else {
-                    _state.value = _state.value.copy(loginHint = "凭据已保存，当前已登录。", error = null)
+                    // 已登录状态下打开登录页（WebView 自动识别到存量 token）：留在登录页显示已登录。
+                    _state.value = _state.value.copy(
+                        loggedIn = true,
+                        loginHint = "凭据已保存，当前已登录。",
+                        error = null,
+                    )
                 }
             } catch (e: AuthSigner.TokenInputError) {
                 _state.value = _state.value.copy(error = "未能识别登录凭据：${e.message}")
