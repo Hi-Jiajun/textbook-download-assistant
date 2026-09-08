@@ -112,33 +112,27 @@ fun BrowseScreen(
     }
 
     Column(Modifier.fillMaxSize().safeDrawingPadding()) {
-        // 品牌顶栏（圆润底部）
-        Surface(
-            color = MaterialTheme.colorScheme.primaryContainer,
-            shape = RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp),
+        // 品牌头部（清爽，无大色块）
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 18.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
+            Box(
+                Modifier.size(44.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.primaryContainer),
+                contentAlignment = Alignment.Center,
             ) {
-                Column {
-                    Text("教材下载助手", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(2.dp))
-                    Text("选择需要的教材，一键离线下载", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(onClick = onOpenCredentials) {
-                        Text(
-                            if (state.loggedIn) "已登录" else "登录",
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                    TextButton(onClick = onOpenLibrary) {
-                        Text("课本库", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
-                    }
-                }
+                Text("书", color = MaterialTheme.colorScheme.onPrimaryContainer, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text("教材下载助手", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text("选择需要的教材，一键离线下载", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            TextButton(onClick = onOpenCredentials) {
+                Text(if (state.loggedIn) "已登录" else "登录", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+            }
+            TextButton(onClick = onOpenLibrary) {
+                Text("教材库", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
             }
         }
 

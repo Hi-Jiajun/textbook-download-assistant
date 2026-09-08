@@ -53,7 +53,7 @@ fun App(viewModel: DownloadViewModel = viewModel()) {
                     DownloadViewModel.Step.DONE -> DoneScreen(
                         downloadedCount = state.downloadedCount,
                         bookmarksCount = state.bookmarksCount,
-                        onAgain = viewModel::reset,
+                        onBackHome = viewModel::reset,
                         onOpenLibrary = viewModel::openLibrary,
                     )
                     DownloadViewModel.Step.LIBRARY -> LibraryScreen(

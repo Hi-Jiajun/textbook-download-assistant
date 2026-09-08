@@ -278,9 +278,22 @@ class DownloadViewModel(app: Application) : AndroidViewModel(app) {
         _state.value = _state.value.copy(library = libraryStore.remove(path))
     }
 
+    /** 下载完成后返回首页：清掉本次下载流程状态，但保留目录与登录态，避免每次都要重新登录。 */
     fun reset() {
-        credentials = null
         pendingDownload = false
-        _state.value = UiState(library = libraryStore.load())
+        val s = _state.value
+        _state.value = s.copy(
+            step = Step.BROWSE,
+            selectedIds = emptySet(),
+            resources = emptyList(),
+            loading = false,
+            error = null,
+            progressDone = 0,
+            progressTotal = 0,
+            currentIndex = 0,
+            downloadedCount = 0,
+            bookmarksCount = 0,
+            loginHint = if (credentials != null) "当前已登录。" else "请登录...",
+        )
     }
 }

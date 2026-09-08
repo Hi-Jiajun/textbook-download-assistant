@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
-    <!-- 下载目录（getExternalFilesDir(DIRECTORY_DOWNLOADS)） -->
-    <external-files-path name="downloads" path="Download/" />
+    <!-- 应用外部 files 目录（下载在其中的 Download/ 子目录），便于「打开位置」用文件管理器打开 -->
+    <external-files-path name="external" path="." />
     <!-- 应用私有 files 目录 -->
     <files-path name="files" path="." />
 </paths>

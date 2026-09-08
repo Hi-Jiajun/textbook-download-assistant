@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
@@ -49,18 +50,19 @@ fun LibraryScreen(
     val context = LocalContext.current
     Column(Modifier.fillMaxSize().safeDrawingPadding().padding(16.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text("我的课本库", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+            Text("我的教材库", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
             TextButton(onClick = onBack) { Text("返回") }
         }
         Spacer(Modifier.height(8.dp))
         if (library.isEmpty()) {
             Text(
-                "还没有下载的课本。回到首页勾选教材，跟着步骤下载后会自动收录到这里。",
+                "还没有下载的教材。回到首页勾选教材，跟着步骤下载后会自动收录到这里。",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                items(library, key = { it.path }) { item ->
+                // 用 path+addedAt 作为唯一 key，避免同一本书重复下载产生相同路径导致 key 冲突。
+                items(library, key = { it.path + ":" + it.addedAt }) { item ->
                     SavedCard(item, onDelete)
                 }
             }
@@ -94,13 +96,15 @@ private fun SavedCard(item: SavedItem, onDelete: (String) -> Unit) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+                TextButton(onClick = { onDelete(item.path) }) {
+                    Text("删除", color = MaterialTheme.colorScheme.error)
+                }
             }
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { openPdf(context, item.path) }) { Text("打开") }
-                OutlinedButton(onClick = { sharePdf(context, item.path) }) { Text("分享") }
-                OutlinedButton(onClick = { copyPath(context, item.path) }) { Text("复制路径") }
-                TextButton(onClick = { onDelete(item.path) }) { Text("删除") }
+                OutlinedButton(onClick = { openPdf(context, item.path) }, modifier = Modifier.weight(1f)) { Text("打开", maxLines = 1) }
+                OutlinedButton(onClick = { openFolder(context, item.path) }, modifier = Modifier.weight(1f)) { Text("打开位置", maxLines = 1) }
+                OutlinedButton(onClick = { sharePdf(context, item.path) }, modifier = Modifier.weight(1f)) { Text("分享", maxLines = 1) }
             }
         }
     }
@@ -108,29 +112,61 @@ private fun SavedCard(item: SavedItem, onDelete: (String) -> Unit) {
 
 private fun openPdf(context: Context, path: String) {
     val file = File(path)
-    if (!file.exists()) return
-    val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-    val intent = Intent(Intent.ACTION_VIEW).apply {
-        setDataAndType(uri, "application/pdf")
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    if (!file.exists()) {
+        Toast.makeText(context, "文件不存在或已被移动", Toast.LENGTH_SHORT).show()
+        return
     }
-    context.startActivity(Intent.createChooser(intent, "打开 PDF"))
+    try {
+        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, "application/pdf")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(Intent.createChooser(intent, "打开 PDF"))
+    } catch (e: Exception) {
+        Toast.makeText(context, "无法打开该 PDF", Toast.LENGTH_SHORT).show()
+    }
 }
 
 private fun sharePdf(context: Context, path: String) {
     val file = File(path)
-    if (!file.exists()) return
-    val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-    val intent = Intent(Intent.ACTION_SEND).apply {
-        type = "application/pdf"
-        putExtra(Intent.EXTRA_STREAM, uri)
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    if (!file.exists()) {
+        Toast.makeText(context, "文件不存在或已被移动", Toast.LENGTH_SHORT).show()
+        return
     }
-    context.startActivity(Intent.createChooser(intent, "分享 PDF"))
+    try {
+        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "application/pdf"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(Intent.createChooser(intent, "分享 PDF"))
+    } catch (e: Exception) {
+        Toast.makeText(context, "无法分享该 PDF", Toast.LENGTH_SHORT).show()
+    }
 }
 
-private fun copyPath(context: Context, path: String) {
-    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    clipboard.setPrimaryClip(ClipData.newPlainText("文件路径", path))
-    Toast.makeText(context, "路径已复制：$path", Toast.LENGTH_SHORT).show()
+/** 打开文件所在目录（调用系统文件管理器）；失败时改为复制目录路径并提示。 */
+private fun openFolder(context: Context, path: String) {
+    val file = File(path)
+    val folder = file.parentFile
+    if (folder == null || !folder.exists()) {
+        Toast.makeText(context, "文件夹不存在或已被移动", Toast.LENGTH_SHORT).show()
+        return
+    }
+    try {
+        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", folder)
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, "resource/folder")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+        }
+        context.startActivity(Intent.createChooser(intent, "用文件管理器打开"))
+    } catch (e: Exception) {
+        // 部分机型不支持以目录意图打开，回退为复制目录路径。
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText("文件夹路径", folder.absolutePath))
+        Toast.makeText(context, "无法打开文件管理器，已复制目录：${folder.absolutePath}", Toast.LENGTH_SHORT).show()
+    }
 }

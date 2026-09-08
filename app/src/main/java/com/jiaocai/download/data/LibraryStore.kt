@@ -35,7 +35,8 @@ class LibraryStore(private val context: Context) {
     }
 
     fun append(item: SavedItem): List<SavedItem> {
-        val list = load().toMutableList()
+        // 同一本书重复下载时用相同路径，直接覆盖旧记录，避免列表出现重复行。
+        val list = load().filterNot { it.path == item.path }.toMutableList()
         list.add(item)
         save(list)
         return list
