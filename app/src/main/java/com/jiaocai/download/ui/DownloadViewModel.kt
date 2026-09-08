@@ -13,10 +13,11 @@ import com.jiaocai.download.data.TokenStore
 import com.jiaocai.download.model.ResourceInfo
 import com.jiaocai.download.model.SavedItem
 import com.jiaocai.download.model.Textbook
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class DownloadViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -33,6 +34,10 @@ class DownloadViewModel(app: Application) : AndroidViewModel(app) {
         val subjectFilter: String = "",
         val versionFilter: String = "",
         val selectedIds: Set<String> = emptySet(),
+        val filterStages: List<String> = emptyList(),
+        val filterSubjects: List<String> = emptyList(),
+        val filterVersions: List<String> = emptyList(),
+        val loggedIn: Boolean = false,
         // 登录与下载
         val loginHint: String = "请在下方网页中先登录国家中小学智慧教育平台账号，登录成功后会在这里提示。",
         val resources: List<ResourceInfo> = emptyList(),
@@ -53,6 +58,7 @@ class DownloadViewModel(app: Application) : AndroidViewModel(app) {
     private val engine = DownloadEngine(app)
     private val libraryStore = LibraryStore(app)
     private var credentials: AuthSigner.Credentials? = null
+    private var pendingDownload = false
 
     init {
         _state.value = _state.value.copy(library = libraryStore.load())
@@ -63,13 +69,14 @@ class DownloadViewModel(app: Application) : AndroidViewModel(app) {
     /** 启动时从本地恢复上次登录的凭据，实现「记住登录」。 */
     private fun restoreCredentials() {
         viewModelScope.launch {
-            val saved = tokenStore.tokenJson.first()
+            val saved = tokenStore.load()
             if (saved != null && credentials == null) {
                 credentials = try {
                     AuthSigner.parseTokenInput(saved)
                 } catch (_: Exception) {
                     null
                 }
+                _state.value = _state.value.copy(loggedIn = credentials != null)
             }
         }
     }
@@ -80,7 +87,20 @@ class DownloadViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             try {
                 val books = CatalogApi.fetchTextbooks()
-                _state.value = _state.value.copy(textbooks = books, catalogLoading = false)
+                val (stages, subjects, versions) = withContext(Dispatchers.Default) {
+                    Triple(
+                        books.map { it.stage }.filter { it.isNotBlank() }.distinct().sorted(),
+                        books.map { it.subject }.filter { it.isNotBlank() }.distinct().sorted(),
+                        books.map { it.version }.filter { it.isNotBlank() }.distinct().sorted(),
+                    )
+                }
+                _state.value = _state.value.copy(
+                    textbooks = books,
+                    filterStages = stages,
+                    filterSubjects = subjects,
+                    filterVersions = versions,
+                    catalogLoading = false,
+                )
             } catch (e: Exception) {
                 _state.value = _state.value.copy(
                     catalogLoading = false,
@@ -110,6 +130,16 @@ class DownloadViewModel(app: Application) : AndroidViewModel(app) {
         _state.value = _state.value.copy(step = Step.LIBRARY, library = libraryStore.load(), error = null)
     }
 
+    /** 从首页进入「登录/凭据」页，可重新登录或手动更新凭据。 */
+    fun openCredentials() {
+        pendingDownload = false
+        _state.value = _state.value.copy(
+            step = Step.LOGIN,
+            error = null,
+            loginHint = if (credentials != null) "当前已是登录状态，可重新登录或手动更新凭据。" else "请登录国家中小学智慧教育平台账号，或手动粘贴凭据。",
+        )
+    }
+
     /** 浏览页点击「去下载」：确保已登录后开始解析并下载所选教材。 */
     fun startDownload() {
         val selected = _state.value.textbooks.filter { it.id in _state.value.selectedIds }
@@ -118,6 +148,7 @@ class DownloadViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         if (credentials == null) {
+            pendingDownload = true
             _state.value = _state.value.copy(
                 step = Step.LOGIN,
                 loginHint = "请先登录国家中小学智慧教育平台账号，登录成功后会自动解析并下载你选中的教材。",
@@ -135,9 +166,14 @@ class DownloadViewModel(app: Application) : AndroidViewModel(app) {
                 val cred = AuthSigner.parseTokenInput(json)
                 credentials = cred
                 tokenStore.save(json)
-                val selected = _state.value.textbooks.filter { it.id in _state.value.selectedIds }
-                _state.value = _state.value.copy(error = null)
-                beginResolveDownload(selected)
+                _state.value = _state.value.copy(loggedIn = true)
+                if (pendingDownload) {
+                    val selected = _state.value.textbooks.filter { it.id in _state.value.selectedIds }
+                    _state.value = _state.value.copy(error = null)
+                    beginResolveDownload(selected)
+                } else {
+                    _state.value = _state.value.copy(loginHint = "凭据已保存，当前已登录。", error = null)
+                }
             } catch (e: AuthSigner.TokenInputError) {
                 _state.value = _state.value.copy(error = "未能识别登录凭据：${e.message}")
             }
@@ -145,6 +181,7 @@ class DownloadViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun beginResolveDownload(selected: List<Textbook>) {
+        pendingDownload = false
         val cred = credentials
         if (selected.isEmpty() || cred == null) {
             _state.value = _state.value.copy(error = "尚未获取登录凭据，请回到登录步骤。", step = Step.LOGIN)
@@ -212,6 +249,7 @@ class DownloadViewModel(app: Application) : AndroidViewModel(app) {
 
     fun reset() {
         credentials = null
+        pendingDownload = false
         _state.value = UiState(library = libraryStore.load())
     }
 }

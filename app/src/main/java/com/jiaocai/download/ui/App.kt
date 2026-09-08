@@ -28,6 +28,7 @@ fun App(viewModel: DownloadViewModel = viewModel()) {
                         viewModel = viewModel,
                         state = state,
                         onOpenLibrary = viewModel::openLibrary,
+                        onOpenCredentials = viewModel::openCredentials,
                     )
                     DownloadViewModel.Step.LOGIN -> LoginScreen(
                         hint = state.loginHint,

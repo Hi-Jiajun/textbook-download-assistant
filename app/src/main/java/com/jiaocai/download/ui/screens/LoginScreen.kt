@@ -100,7 +100,7 @@ fun LoginScreen(
             TextButton(onClick = onBack) { Text("上一步") }
             TextButton(onClick = { webView.reload() }) { Text("重新加载") }
         }
-        Text("第 2 步 / 共 3 步：登录并获取凭据", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+        Text("登录国家中小学智慧教育平台，获取下载凭据", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(4.dp))
         Text(hint, style = MaterialTheme.typography.bodySmall)
         if (error != null) {
