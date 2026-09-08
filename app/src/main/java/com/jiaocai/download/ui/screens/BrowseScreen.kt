@@ -29,6 +29,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import com.jiaocai.download.model.Textbook
 import com.jiaocai.download.ui.DownloadViewModel
 import coil.compose.AsyncImage
+import coil.imageLoader
 import coil.request.ImageRequest
 import kotlin.math.absoluteValue
 
@@ -82,6 +84,25 @@ fun BrowseScreen(
                         b.subject.contains(state.query, ignoreCase = true) ||
                         b.grade.contains(state.query, ignoreCase = true)
                     )
+        }
+    }
+
+    // 目录/筛选变化后，一次性预热当前列表的封面缩略图，避免首次滑动时逐个下载导致卡顿。
+    val context = LocalContext.current
+    LaunchedEffect(filtered) {
+        if (filtered.isNotEmpty()) {
+            val loader = context.imageLoader
+            filtered.take(120).forEach { b ->
+                b.thumb?.let { u ->
+                    loader.enqueue(
+                        ImageRequest.Builder(context)
+                            .data(u)
+                            .size(256)
+                            .crossfade(false)
+                            .build(),
+                    )
+                }
+            }
         }
     }
 
@@ -175,7 +196,7 @@ private fun TextbookCard(book: Textbook, selected: Boolean, onToggle: () -> Unit
     ) {
         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(
-                Modifier.size(46.dp).clip(RoundedCornerShape(10.dp)).background(coverColor(book.subject)),
+                Modifier.size(width = 54.dp, height = 74.dp).clip(RoundedCornerShape(8.dp)).background(coverColor(book.subject)),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(book.subject.take(1).ifEmpty { "书" }, color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
