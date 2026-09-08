@@ -14,13 +14,6 @@ android {
         versionCode = 1
         versionName = "0.1.0"
 
-        // 从 .env 读取可选配置（BuildConfig 常量）。缺失时用空串兜底。
-        val licenseApiBaseUrl = providers.gradleProperty("LICENSE_API_BASE_URL").orNull ?: ""
-        val sponsorUrl = providers.gradleProperty("SPONSOR_URL").orNull ?: ""
-        val supportEmail = providers.gradleProperty("SUPPORT_EMAIL").orNull ?: ""
-        buildConfigField("String", "LICENSE_API_BASE_URL", "\"$licenseApiBaseUrl\"")
-        buildConfigField("String", "SPONSOR_URL", "\"$sponsorUrl\"")
-        buildConfigField("String", "SUPPORT_EMAIL", "\"$supportEmail\"")
     }
 
     buildTypes {
@@ -40,6 +33,9 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
     }
     packaging {
         resources {
@@ -74,4 +70,9 @@ dependencies {
     implementation("io.coil-kt:coil-compose:2.7.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
+
+    // 本地单元测试（Robolectric 用于 DataStore/JSON/PDFBox 等 Android 环境）
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("androidx.test:core-ktx:1.6.1")
+    testImplementation("org.robolectric:robolectric:4.16.1")
 }
