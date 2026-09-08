@@ -1,5 +1,6 @@
 package com.jiaocai.download.data
 
+import android.util.Log
 import com.jiaocai.download.model.Chapter
 import com.jiaocai.download.model.ResourceInfo
 import kotlinx.coroutines.Dispatchers
@@ -16,6 +17,8 @@ import java.util.concurrent.TimeUnit
  * tchMaterial-parser 的 api.py 移植。
  */
 object SmartEduApi {
+
+    private const val TAG = "SmartEduApi"
 
     private const val PRIVATE_CDN = "https://r1-ndr-private.ykt.cbern.com.cn"
     private val client = OkHttpClient.Builder()
@@ -144,7 +147,10 @@ object SmartEduApi {
                 }
                 if (!mappingUrl.isNullOrEmpty()) break
             }
-            if (mappingUrl.isNullOrEmpty()) return emptyList()
+            if (mappingUrl.isNullOrEmpty()) {
+                Log.w(TAG, "未找到 ebook_mapping，跳过书签")
+                return emptyList()
+            }
 
             // mapping 在私有 CDN 上，必须按 URL 现算签名
             val mapData = getJson(mappingUrl, credentials)
@@ -158,7 +164,10 @@ object SmartEduApi {
                 }
             }
 
-            if (ebookId.isEmpty()) return emptyList()
+            if (ebookId.isEmpty()) {
+                Log.w(TAG, "mapping 缺少 ebook_id：$mappingUrl")
+                return emptyList()
+            }
             val treeBody = getText("https://s-file-1.ykt.cbern.com.cn/zxx/ndrv2/national_lesson/trees/$ebookId.json")
             val pageByNode = pageMap.toMap()
 
@@ -166,7 +175,7 @@ object SmartEduApi {
                 val out = mutableListOf<Chapter>()
                 for (i in 0 until nodes.length()) {
                     val node = nodes.getJSONObject(i)
-                    val children = if (node.has("child_nodes")) build(node.getJSONArray("child_nodes")) else emptyList()
+                    val children = node.optJSONArray("child_nodes")?.let { build(it) } ?: emptyList()
                     out.add(
                         Chapter(
                             title = node.optString("title"),
@@ -178,12 +187,15 @@ object SmartEduApi {
                 return out
             }
 
-            when {
+            val chapters = when {
                 treeBody.trimStart().startsWith("[") -> build(JSONArray(treeBody))
                 JSONObject(treeBody).has("child_nodes") -> build(JSONObject(treeBody).getJSONArray("child_nodes"))
                 else -> emptyList()
             }
+            Log.i(TAG, "章节目录：mapping=${pageMap.size} 项，tree=${treeBody.length} 字节，章节=${chapters.size} 项")
+            chapters
         } catch (e: Exception) {
+            Log.w(TAG, "读取章节目录失败：${e.message}", e)
             emptyList() // 书签是增强项，失败静默降级
         }
     }

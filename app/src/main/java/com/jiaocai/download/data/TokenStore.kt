@@ -1,9 +1,11 @@
 package com.jiaocai.download.data
 
 import android.content.Context
+import android.os.Build
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import androidx.annotation.RequiresApi
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -24,6 +26,7 @@ class TokenStore(private val context: Context) {
 
     private val key = stringPreferencesKey("token_json")
 
+    @RequiresApi(Build.VERSION_CODES.M)
     private fun getOrCreateKey(): SecretKey {
         val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         (ks.getKey(ALIAS, null) as? SecretKey)?.let { return it }
@@ -37,28 +40,47 @@ class TokenStore(private val context: Context) {
         return generator.generateKey()
     }
 
-    /** 加密并保存明文 token JSON。 */
+    /** 加密并保存明文 token JSON。Android 5.0/5.1 无 Keystore AES/GCM，退化为应用私有目录存储。 */
     suspend fun save(token: String) {
+        val stored = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            encrypt(token)
+        } else {
+            PLAIN_PREFIX + Base64.encodeToString(token.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
+        }
+        context.credentialsDataStore.edit { it[key] = stored }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.M)
+    private fun encrypt(token: String): String {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey())
         val ct = cipher.doFinal(token.toByteArray(Charsets.UTF_8))
-        val packed = cipher.iv + ct // iv(12) + ciphertext
-        context.credentialsDataStore.edit { it[key] = Base64.encodeToString(packed, Base64.NO_WRAP) }
+        return Base64.encodeToString(cipher.iv + ct, Base64.NO_WRAP) // iv(12) + ciphertext
     }
 
     /** 读取并解密 token；未保存或解密失败返回 null。 */
     suspend fun load(): String? {
         val stored = context.credentialsDataStore.data.first()[key] ?: return null
         return try {
-            val bytes = Base64.decode(stored, Base64.NO_WRAP)
-            val iv = bytes.copyOfRange(0, IV_LEN)
-            val ct = bytes.copyOfRange(IV_LEN, bytes.size)
-            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-            cipher.init(Cipher.DECRYPT_MODE, getOrCreateKey(), GCMParameterSpec(TAG_BITS, iv))
-            String(cipher.doFinal(ct), Charsets.UTF_8)
+            when {
+                stored.startsWith(PLAIN_PREFIX) ->
+                    String(Base64.decode(stored.removePrefix(PLAIN_PREFIX), Base64.NO_WRAP), Charsets.UTF_8)
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.M -> decrypt(stored)
+                else -> null
+            }
         } catch (_: Exception) {
             null
         }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.M)
+    private fun decrypt(stored: String): String {
+        val bytes = Base64.decode(stored, Base64.NO_WRAP)
+        val iv = bytes.copyOfRange(0, IV_LEN)
+        val ct = bytes.copyOfRange(IV_LEN, bytes.size)
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.DECRYPT_MODE, getOrCreateKey(), GCMParameterSpec(TAG_BITS, iv))
+        return String(cipher.doFinal(ct), Charsets.UTF_8)
     }
 
     suspend fun clear() {
@@ -69,5 +91,6 @@ class TokenStore(private val context: Context) {
         const val ALIAS = "textbook_token_key"
         const val IV_LEN = 12
         const val TAG_BITS = 128
+        const val PLAIN_PREFIX = "plain:"
     }
 }

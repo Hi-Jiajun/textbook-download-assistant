@@ -5,6 +5,8 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Environment
+import android.provider.DocumentsContract
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
@@ -147,7 +149,7 @@ private fun sharePdf(context: Context, path: String) {
     }
 }
 
-/** 打开文件所在目录（调用系统文件管理器）；失败时改为复制目录路径并提示。 */
+/** 用系统文件管理器定位到文件所在目录；不支持时回退为复制目录路径。 */
 private fun openFolder(context: Context, path: String) {
     val file = File(path)
     val folder = file.parentFile
@@ -155,18 +157,35 @@ private fun openFolder(context: Context, path: String) {
         Toast.makeText(context, "文件夹不存在或已被移动", Toast.LENGTH_SHORT).show()
         return
     }
-    try {
-        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", folder)
-        val intent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(uri, "resource/folder")
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+    val root = Environment.getExternalStorageDirectory().absolutePath
+    if (!folder.absolutePath.startsWith("$root/")) {
+        copyFolderPath(context, folder)
+        return
+    }
+    val documentId = "primary:" + folder.absolutePath.removePrefix("$root/")
+    val uri = DocumentsContract.buildDocumentUri("com.android.externalstorage.documents", documentId)
+    val intent = Intent(Intent.ACTION_VIEW).apply {
+        setDataAndType(uri, DocumentsContract.Document.MIME_TYPE_DIR)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    // 优先直接打开系统「文件」，避免弹出包含网盘/办公软件的通用选择器。
+    for (pkg in listOf("com.google.android.documentsui", "com.android.documentsui")) {
+        try {
+            context.startActivity(Intent(intent).setPackage(pkg))
+            return
+        } catch (_: Exception) {
+            // 尝试下一个候选。
         }
+    }
+    try {
         context.startActivity(Intent.createChooser(intent, "用文件管理器打开"))
     } catch (e: Exception) {
-        // 部分机型不支持以目录意图打开，回退为复制目录路径。
-        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        clipboard.setPrimaryClip(ClipData.newPlainText("文件夹路径", folder.absolutePath))
-        Toast.makeText(context, "无法打开文件管理器，已复制目录：${folder.absolutePath}", Toast.LENGTH_SHORT).show()
+        copyFolderPath(context, folder)
     }
+}
+
+private fun copyFolderPath(context: Context, folder: File) {
+    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    clipboard.setPrimaryClip(ClipData.newPlainText("文件夹路径", folder.absolutePath))
+    Toast.makeText(context, "无法打开文件管理器，已复制目录：${folder.absolutePath}", Toast.LENGTH_SHORT).show()
 }
