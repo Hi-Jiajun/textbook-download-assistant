@@ -53,21 +53,35 @@ object SmartEduApi {
                 throw ResolveException("当前原型仅支持普通电子课本（assets_document）。")
             }
 
-            val detailUrl = "https://s-file-1.ykt.cbern.com.cn/zxx/ndrv2/resources/tch_material/details/$contentId.json"
-            val data = getJson(detailUrl)
-            val rootTitle = data.optString("title")
-
-            val source = pickSource(data) ?: throw ResolveException("未找到可下载的源文件。")
-            val title = combineTitle(rootTitle, source.title)
-
-            ResourceInfo(
-                title = title,
-                url = source.url,
-                format = source.format,
-                chapters = if (bookmarks) readChapters(data, credentials) else emptyList(),
-                edition = editionOf(data),
-            )
+            buildResource(getJson(detailUrl(contentId)), credentials, bookmarks)
         }
+
+    /** 直接从 contentId 解析（供应用内「浏览勾选」流程使用，无需拼预览链接）。 */
+    suspend fun resolveById(contentId: String, credentials: AuthSigner.Credentials, bookmarks: Boolean = true): ResourceInfo =
+        withContext(Dispatchers.IO) {
+            buildResource(getJson(detailUrl(contentId)), credentials, bookmarks)
+        }
+
+    private fun detailUrl(contentId: String): String =
+        "https://s-file-1.ykt.cbern.com.cn/zxx/ndrv2/resources/tch_material/details/$contentId.json"
+
+    /** 由详情 JSON 构造可下载的 ResourceInfo。 */
+    private fun buildResource(
+        data: JSONObject,
+        credentials: AuthSigner.Credentials,
+        bookmarks: Boolean,
+    ): ResourceInfo {
+        val rootTitle = data.optString("title")
+        val source = pickSource(data) ?: throw ResolveException("未找到可下载的源文件。")
+        val title = combineTitle(rootTitle, source.title)
+        return ResourceInfo(
+            title = title,
+            url = source.url,
+            format = source.format,
+            chapters = if (bookmarks) readChapters(data, credentials) else emptyList(),
+            edition = editionOf(data),
+        )
+    }
 
     private data class Source(val title: String, val url: String, val format: String)
 

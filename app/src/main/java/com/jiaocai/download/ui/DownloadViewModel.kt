@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.jiaocai.download.data.AuthSigner
+import com.jiaocai.download.data.CatalogApi
 import com.jiaocai.download.data.DownloadEngine
 import com.jiaocai.download.data.LibraryStore
 import com.jiaocai.download.data.PdfBookmarker
@@ -11,17 +12,27 @@ import com.jiaocai.download.data.SmartEduApi
 import com.jiaocai.download.data.TokenStore
 import com.jiaocai.download.model.ResourceInfo
 import com.jiaocai.download.model.SavedItem
+import com.jiaocai.download.model.Textbook
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 class DownloadViewModel(app: Application) : AndroidViewModel(app) {
 
-    enum class Step { WELCOME, INPUT, LOGIN, RESOLVE, DOWNLOAD, DONE, LIBRARY }
+    enum class Step { BROWSE, LOGIN, RESOLVE, DOWNLOAD, DONE, LIBRARY }
 
     data class UiState(
-        val step: Step = Step.WELCOME,
-        val urls: String = "",
+        val step: Step = Step.BROWSE,
+        // 教材目录与筛选
+        val textbooks: List<Textbook> = emptyList(),
+        val catalogLoading: Boolean = false,
+        val catalogError: String? = null,
+        val query: String = "",
+        val stageFilter: String = "",
+        val subjectFilter: String = "",
+        val versionFilter: String = "",
+        val selectedIds: Set<String> = emptySet(),
+        // 登录与下载
         val loginHint: String = "请在下方网页中先登录国家中小学智慧教育平台账号，登录成功后会在这里提示。",
         val resources: List<ResourceInfo> = emptyList(),
         val loading: Boolean = false,
@@ -44,10 +55,35 @@ class DownloadViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         _state.value = _state.value.copy(library = libraryStore.load())
+        loadCatalog()
     }
 
-    fun setUrls(value: String) {
-        _state.value = _state.value.copy(urls = value)
+    private fun loadCatalog() {
+        if (_state.value.catalogLoading) return
+        _state.value = _state.value.copy(catalogLoading = true, catalogError = null)
+        viewModelScope.launch {
+            try {
+                val books = CatalogApi.fetchTextbooks()
+                _state.value = _state.value.copy(textbooks = books, catalogLoading = false)
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(
+                    catalogLoading = false,
+                    catalogError = e.message ?: "加载教材目录失败，请检查网络后重试。",
+                )
+            }
+        }
+    }
+
+    fun refreshCatalog() = loadCatalog()
+
+    fun setQuery(value: String) { _state.value = _state.value.copy(query = value) }
+    fun setStageFilter(value: String) { _state.value = _state.value.copy(stageFilter = value) }
+    fun setSubjectFilter(value: String) { _state.value = _state.value.copy(subjectFilter = value) }
+    fun setVersionFilter(value: String) { _state.value = _state.value.copy(versionFilter = value) }
+
+    fun toggleSelect(id: String) {
+        val cur = _state.value.selectedIds
+        _state.value = _state.value.copy(selectedIds = if (id in cur) cur - id else cur + id)
     }
 
     fun go(step: Step) {
@@ -58,31 +94,43 @@ class DownloadViewModel(app: Application) : AndroidViewModel(app) {
         _state.value = _state.value.copy(step = Step.LIBRARY, library = libraryStore.load(), error = null)
     }
 
-    /** WebView 捕获到登录凭据 JSON 后调用：保存本地并进入解析。 */
+    /** 浏览页点击「去下载」：确保已登录后开始解析并下载所选教材。 */
+    fun startDownload() {
+        val selected = _state.value.textbooks.filter { it.id in _state.value.selectedIds }
+        if (selected.isEmpty()) {
+            _state.value = _state.value.copy(error = "请先勾选至少一本教材。")
+            return
+        }
+        if (credentials == null) {
+            _state.value = _state.value.copy(
+                step = Step.LOGIN,
+                loginHint = "请先登录国家中小学智慧教育平台账号，登录成功后会自动解析并下载你选中的教材。",
+                error = null,
+            )
+            return
+        }
+        beginResolveDownload(selected)
+    }
+
+    /** WebView 捕获到登录凭据 JSON 后调用：保存本地并继续解析下载所选教材。 */
     fun onTokenCaptured(json: String) {
         viewModelScope.launch {
             try {
                 val cred = AuthSigner.parseTokenInput(json)
                 credentials = cred
                 tokenStore.save(json)
-                _state.value = _state.value.copy(
-                    loginHint = "登录凭据已获取，正在解析资源…",
-                    error = null,
-                )
-                resolve()
+                val selected = _state.value.textbooks.filter { it.id in _state.value.selectedIds }
+                _state.value = _state.value.copy(error = null)
+                beginResolveDownload(selected)
             } catch (e: AuthSigner.TokenInputError) {
                 _state.value = _state.value.copy(error = "未能识别登录凭据：${e.message}")
             }
         }
     }
 
-    fun resolve() {
-        val urls = _state.value.urls.lines().map { it.trim() }.filter { it.isNotBlank() }
-        if (urls.isEmpty()) {
-            _state.value = _state.value.copy(error = "请先粘贴至少一个电子课本预览页链接。", step = Step.INPUT)
-            return
-        }
-        val cred = credentials ?: run {
+    private fun beginResolveDownload(selected: List<Textbook>) {
+        val cred = credentials
+        if (selected.isEmpty() || cred == null) {
             _state.value = _state.value.copy(error = "尚未获取登录凭据，请回到登录步骤。", step = Step.LOGIN)
             return
         }
@@ -90,8 +138,8 @@ class DownloadViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val results = mutableListOf<ResourceInfo>()
             try {
-                for (url in urls) {
-                    results.add(SmartEduApi.resolve(url, cred, bookmarks = true))
+                for (b in selected) {
+                    results.add(SmartEduApi.resolveById(b.id, cred, bookmarks = true))
                 }
                 _state.value = _state.value.copy(resources = results, loading = false, step = Step.RESOLVE)
             } catch (e: Exception) {
