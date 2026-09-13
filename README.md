@@ -58,6 +58,24 @@ App 内会打开国家中小学智慧教育平台登录页。登录成功后，A
 
 单元测试位于 `app/src/test`，覆盖签名/凭据解析、教材库文件删除和 PDF 书签写入。
 
+## 验证记录（本地实测）
+
+- 构建：`assembleDebug` 通过；静态检查 `lintDebug` 0 error。
+- 单元测试：16 个用例全部通过（`testDebugUnitTest`）。
+- Android 5.0.2 / API 21 模拟器：冷启动正常，教材目录与封面缩略图加载正常，勾选教材、进入登录页、展开手动凭据入口均正常，无崩溃。
+- 目录缓存：首次联网生成 `catalog_cache.jsonl`（约 1.2 MB），二次冷启动约 0.7 秒完成首屏。
+- 真机（小米 15S Pro / Android 16）：级联筛选、封面缩略图、登录与退出、批量下载、PDF 书签写入、教材库打开/分享/删除均正常；154 页课本实测写入 88 个多级书签。
+
+## 截图
+
+| 首页浏览 | 级联筛选 | 勾选教材 | 解析结果 |
+| --- | --- | --- | --- |
+| ![首页](screenshots/01_home_browse.png) | ![筛选](screenshots/02_cascade_filter.png) | ![勾选](screenshots/03_select_textbook.png) | ![解析](screenshots/04_resolve_result.png) |
+
+| 下载完成（含书签） | 教材库 | 删除确认 | 登录管理 |
+| --- | --- | --- | --- |
+| ![完成](screenshots/05_download_done_bookmarks.png) | ![教材库](screenshots/06_library.png) | ![删除](screenshots/07_delete_confirm.png) | ![登录](screenshots/08_login_manage.png) |
+
 ## 许可证与致谢
 
 本工程采用 MIT 许可，完整文本见 [LICENSE](LICENSE)。二次开发所依赖的上游 [tchMaterial-parser](https://github.com/happycola233/tchMaterial-parser) 使用 MIT 许可，作者：肥宅水水呀；版权与许可声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
