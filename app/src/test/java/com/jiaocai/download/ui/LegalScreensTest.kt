@@ -2,8 +2,10 @@ package com.jiaocai.download.ui
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import com.jiaocai.download.ui.screens.AboutScreen
 import com.jiaocai.download.ui.screens.UsageNoticeDialog
 import com.jiaocai.download.ui.theme.TextbookTheme
@@ -43,8 +45,14 @@ class LegalScreensTest {
 
         // 赞助文案必须明确「不解锁任何功能」，这是不能弱化的措辞
         compose.onNodeWithText(LegalText.SPONSOR_NOTICE).assertExists()
-        // 未内置收款码时应显示占位提示，而不是留空白
-        compose.onNodeWithText(LegalText.SPONSOR_PLACEHOLDER).assertExists()
+        // 收款码已内置：应显示两张码，而不是占位提示
+        compose.onNodeWithContentDescription("微信 收款码").assertExists()
+        compose.onNodeWithContentDescription("支付宝 收款码").assertExists()
+        compose.onNodeWithText(LegalText.SPONSOR_PLACEHOLDER).assertDoesNotExist()
+
+        // 并排时二维码偏小，点按必须能放大
+        compose.onNodeWithContentDescription("微信 收款码").performScrollTo().performClick()
+        compose.onNodeWithContentDescription("微信 收款码（放大）").assertExists()
 
         // 四段式免责声明每一段都要在界面上
         LegalText.DISCLAIMER_SECTIONS.forEach { (title, body) ->

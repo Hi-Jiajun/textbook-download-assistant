@@ -3,6 +3,7 @@ package com.jiaocai.download.ui.screens
 import android.content.Context
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -25,12 +26,17 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -38,6 +44,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import com.jiaocai.download.BuildConfig
 import com.jiaocai.download.ui.LegalText
 
@@ -182,14 +189,23 @@ private fun SectionCard(title: String, content: @Composable () -> Unit) {
     }
 }
 
+/**
+ * 一张收款码。并排显示时二维码偏小，可能扫不动，所以点按可以放大到全屏宽度。
+ * 放大只影响显示，不改变任何功能，也不做任何引导或催促。
+ */
 @Composable
 private fun SponsorCode(label: String, bitmap: ImageBitmap?, modifier: Modifier = Modifier) {
+    var enlarged by remember { mutableStateOf(false) }
+
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         if (bitmap != null) {
             Image(
                 bitmap = bitmap,
                 contentDescription = "$label 收款码",
-                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable { enlarged = true },
                 contentScale = ContentScale.Fit,
             )
         } else {
@@ -197,6 +213,37 @@ private fun SponsorCode(label: String, bitmap: ImageBitmap?, modifier: Modifier 
         }
         Spacer(Modifier.height(6.dp))
         Text(label, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+        if (bitmap != null) {
+            Text(
+                "点按放大",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+
+    if (enlarged && bitmap != null) {
+        Dialog(onDismissRequest = { enlarged = false }) {
+            Surface(shape = RoundedCornerShape(20.dp), color = Color.White) {
+                Column(
+                    Modifier.padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Image(
+                        bitmap = bitmap,
+                        contentDescription = "$label 收款码（放大）",
+                        modifier = Modifier.fillMaxWidth(),
+                        contentScale = ContentScale.Fit,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "$label · 点按空白处关闭",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF444444),
+                    )
+                }
+            }
+        }
     }
 }
 
