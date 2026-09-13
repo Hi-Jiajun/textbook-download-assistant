@@ -1,6 +1,6 @@
 # 教材下载助手 (textbook-download-assistant)
 
-安卓手机端电子课本下载工具，用分步引导带用户完成「浏览选择教材 → 应用内登录 → 解析 → 下载」全流程。基于开源项目 [tchMaterial-parser](https://github.com/happycola233/tchMaterial-parser)（MIT 许可）二次开发，并按 MIT 要求保留上游版权声明。
+手机端电子课本下载工具，用分步引导带用户完成「浏览选择教材 → 应用内登录 → 解析 → 下载」全流程。提供 **Android 版**（APK）与 **iOS 版**（未签名 IPA，需自行签名安装）。基于开源项目 [tchMaterial-parser](https://github.com/happycola233/tchMaterial-parser)（MIT 许可）二次开发，并按 MIT 要求保留上游版权声明。
 
 ## 免责声明
 
@@ -43,6 +43,18 @@
 系统要求：Android 5.0（API 21）及以上。
 
 > 发布包由项目维护者本人签名（证书 CN=`Hi-Jiajun`）。如果你拿到的 APK 签名对不上，请不要安装。
+
+## iOS 版（需自行签名安装）
+
+iOS 版**不上架 App Store**：大陆区需要 ICP 备案号（个人拿不到），海外区则受《App 审核指南》5.2.1 知识产权条款限制。因此改为提供**未签名 IPA**，由你自己用 Apple ID 重签后安装——签的是你自己的证书，与任何第三方共享证书无关。
+
+1. 到 Releases 下载 `textbook-download-assistant-v0.1.0-ios-unsigned.ipa`。
+2. 电脑上安装 [AltStore](https://altstore.io/) 或 [Sideloadly](https://sideloadly.io/)，用数据线连接 iPhone，选你自己的 Apple ID 完成签名并安装。
+3. 首次安装后，在 iPhone 的「设置 → 通用 → VPN 与设备管理」里信任你的开发者证书。
+4. 免费 Apple ID 的限制：证书 **7 天有效**、同时最多 3 个自签 App、到期需重新签名（AltStore 可在同一 Wi-Fi 下自动续签）。加入 Apple Developer Program（$99/年）后有效期变为 1 年。
+
+> 系统要求：iOS 15 及以上。IPA 里不含任何 Apple 证书，也不含任何账号信息；请只从本仓库下载，不要安装来源不明的 IPA。
+> 功能与 Android 版一致：浏览目录、应用内登录、解析、下载、写入 PDF 章节书签、教材库；「关于与免责」页同样内置。
 
 ## 本地运行
 
