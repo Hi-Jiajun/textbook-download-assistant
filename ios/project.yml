@@ -1,0 +1,32 @@
+name: TextbookDownloader
+
+options:
+  bundleIdPrefix: com.jiaocai
+  deploymentTarget:
+    iOS: "15.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "5.0"
+    IPHONEOS_DEPLOYMENT_TARGET: "15.0"
+    # 本项目不参与 App Store 分发：只产出未签名 IPA，由用户用自己的 Apple ID 重签。
+    CODE_SIGN_IDENTITY: ""
+    CODE_SIGNING_REQUIRED: "NO"
+    CODE_SIGNING_ALLOWED: "NO"
+
+targets:
+  TextbookDownloader:
+    type: application
+    platform: iOS
+    sources:
+      - TextbookDownloader
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.jiaocai.textbook
+        PRODUCT_NAME: TextbookDownloader
+        INFOPLIST_FILE: TextbookDownloader/Info.plist
+        TARGETED_DEVICE_FAMILY: "1"
+        SUPPORTS_MACCATALYST: "NO"
