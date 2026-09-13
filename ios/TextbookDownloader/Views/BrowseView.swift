@@ -27,9 +27,9 @@ struct BrowseView: View {
             }
             Spacer(minLength: 0)
             Button(state.loggedIn ? "已登录" : "登录") { state.openCredentials() }
-                .font(.subheadline).bold()
+                .font(.subheadline.weight(.semibold))
             Button("教材库") { state.openLibrary() }
-                .font(.subheadline).bold()
+                .font(.subheadline.weight(.semibold))
             Button {
                 state.openAbout()
             } label: {
