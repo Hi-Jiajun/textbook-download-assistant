@@ -114,16 +114,17 @@ jobs:
           sleep 30
           xcrun simctl io "$UDID" screenshot 02-browse.png
 
-          # 断言进程仍然存活：截图是黑屏/回到桌面时说明启动阶段崩了
-          if xcrun simctl spawn "$UDID" launchctl list | grep -q com.jiaocai.textbook; then
+          # 断言进程仍然存活：截图回到桌面或黑屏时说明启动阶段崩了
+          ls -la *.png
+          if xcrun simctl spawn "$UDID" ps -ax 2>/dev/null | grep -q TextbookDownloader; then
             echo "应用进程存活 ✓"
           else
             echo "应用进程已退出（可能崩溃）✗"
             exit 1
           fi
-          ls -la *.png
 
       - name: 上传截图
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ios-simulator-screenshots
