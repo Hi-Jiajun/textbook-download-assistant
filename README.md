@@ -58,21 +58,6 @@ App 内会打开国家中小学智慧教育平台登录页。登录成功后，A
 
 单元测试位于 `app/src/test`，覆盖签名/凭据解析、教材库文件删除和 PDF 书签写入。
 
-## 打包前检查（NOFX）
-
-在项目根目录执行官方脚本：
-
-```powershell
-curl.exe -fsSLO https://nofx.one/dev-quest/nofx-pack.mjs
-node nofx-pack.mjs
-```
-
-脚本会校验 `NOFX_QUEST.md` 中的入场编号、Git 历史、依赖清单、`.env.example`、真实密钥和运行截图。项目内另提供：
-
-```powershell
-pwsh -File scripts/preflight.ps1
-```
-
 ## 许可证与致谢
 
 本工程采用 MIT 许可，完整文本见 [LICENSE](LICENSE)。二次开发所依赖的上游 [tchMaterial-parser](https://github.com/happycola233/tchMaterial-parser) 使用 MIT 许可，作者：肥宅水水呀；版权与许可声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

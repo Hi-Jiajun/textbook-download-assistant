@@ -3,7 +3,7 @@
 build/
 local.properties
 
-# 中间产物 / 参考克隆（不进 Git，避免被视为“克隆来的历史”）
+# 本地工作目录与产出（不进 Git）
 work/
 outputs/
 
@@ -21,9 +21,6 @@ outputs/
 captures/
 .externalNativeBuild/
 .cxx/
-
-# 本地环境变量
-.env
 
 # 系统
 .DS_Store
