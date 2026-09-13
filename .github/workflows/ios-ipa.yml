@@ -107,15 +107,20 @@ jobs:
           sleep 6
           xcrun simctl io "$UDID" screenshot 01-usage-notice.png
 
-          # 跳过首次启动声明，看主界面（网络拉取教材目录）
-          CONTAINER=$(xcrun simctl get_app_container "$UDID" com.jiaocai.textbook data)
-          defaults write "$CONTAINER/Library/Preferences/com.jiaocai.textbook" usage_notice_accepted -bool YES
+          # 跳过首次启动声明，看主界面（教材目录需要联网拉取，等久一点）
           xcrun simctl terminate "$UDID" com.jiaocai.textbook || true
+          xcrun simctl spawn "$UDID" defaults write com.jiaocai.textbook usage_notice_accepted -bool YES
           xcrun simctl launch "$UDID" com.jiaocai.textbook
-          sleep 20
+          sleep 30
           xcrun simctl io "$UDID" screenshot 02-browse.png
 
-          # 打开「关于与免责」
+          # 断言进程仍然存活：截图是黑屏/回到桌面时说明启动阶段崩了
+          if xcrun simctl spawn "$UDID" launchctl list | grep -q com.jiaocai.textbook; then
+            echo "应用进程存活 ✓"
+          else
+            echo "应用进程已退出（可能崩溃）✗"
+            exit 1
+          fi
           ls -la *.png
 
       - name: 上传截图
