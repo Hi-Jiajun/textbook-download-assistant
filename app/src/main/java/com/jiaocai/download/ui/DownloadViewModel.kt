@@ -5,6 +5,7 @@ import android.widget.Toast
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.jiaocai.download.data.AppPrefs
+import com.jiaocai.download.data.AuthExpiredException
 import com.jiaocai.download.data.AuthSigner
 import com.jiaocai.download.data.CatalogApi
 import com.jiaocai.download.data.DownloadEngine
@@ -18,6 +19,7 @@ import com.jiaocai.download.model.Textbook
 import coil.imageLoader
 import coil.request.ImageRequest
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -67,6 +69,17 @@ class DownloadViewModel(app: Application) : AndroidViewModel(app) {
     private val appPrefs = AppPrefs(app)
     private var credentials: AuthSigner.Credentials? = null
     private var pendingDownload = false
+
+    /** 当前在跑的解析任务。用户离开该步骤时取消，避免「返回后又被拽回解析页」。 */
+    private var flowJob: Job? = null
+
+    /** 用户主动导航时自增，用来判断异步结果是否已经过期。 */
+    private var flowEpoch = 0
+
+    /** 下载失败后的续传点：失败的那一本的序号，以及此前已完成的计数。 */
+    private var retryFromIndex = 0
+    private var retrySaved = 0
+    private var retryBookmarks = 0
 
     init {
         _state.value = _state.value.copy(library = libraryStore.load())
@@ -166,19 +179,45 @@ class DownloadViewModel(app: Application) : AndroidViewModel(app) {
 
     fun toggleSelect(id: String) {
         val cur = _state.value.selectedIds
-        _state.value = _state.value.copy(selectedIds = if (id in cur) cur - id else cur + id)
+        if (id in cur) {
+            _state.value = _state.value.copy(selectedIds = cur - id, error = null)
+            return
+        }
+        // 选满即止：之前是「允许勾选、点下载时才发现超限且不提示」，用户只会觉得点了没反应。
+        if (cur.size >= MAX_BATCH_SIZE) {
+            _state.value = _state.value.copy(
+                error = "单次最多下载 $MAX_BATCH_SIZE 本（合规限制）。请先下载完这批，再勾选下一批。",
+            )
+            return
+        }
+        _state.value = _state.value.copy(selectedIds = cur + id, error = null)
+    }
+
+    /** 用户主动关掉错误提示。 */
+    fun dismissError() {
+        _state.value = _state.value.copy(error = null)
+    }
+
+    /** 取消正在跑的解析任务，并让它的结果作废。 */
+    private fun cancelFlow() {
+        flowEpoch++
+        flowJob?.cancel()
+        flowJob = null
     }
 
     fun go(step: Step) {
+        if (step != Step.DOWNLOAD) cancelFlow()
         _state.value = _state.value.copy(step = step, error = null)
     }
 
     /** 打开「关于与免责」页。 */
     fun openAbout() {
+        cancelFlow()
         _state.value = _state.value.copy(step = Step.ABOUT, error = null)
     }
 
     fun openLibrary() {
+        cancelFlow()
         _state.value = _state.value.copy(step = Step.LIBRARY, library = libraryStore.load(), error = null)
     }
 
@@ -272,39 +311,77 @@ class DownloadViewModel(app: Application) : AndroidViewModel(app) {
             _state.value = _state.value.copy(error = "尚未获取登录凭据，请回到登录步骤。", step = Step.LOGIN)
             return
         }
-        _state.value = _state.value.copy(loading = true, error = null, step = Step.RESOLVE)
-        viewModelScope.launch {
+        cancelFlow()
+        val epoch = flowEpoch
+        _state.value = _state.value.copy(loading = true, error = null, step = Step.RESOLVE, resources = emptyList())
+        flowJob = viewModelScope.launch {
             val results = mutableListOf<ResourceInfo>()
             try {
                 for (b in selected) {
                     results.add(SmartEduApi.resolveById(b.id, cred, bookmarks = true))
                 }
-                _state.value = _state.value.copy(resources = results, loading = false, step = Step.RESOLVE)
+                // 用户可能已经按返回离开解析页：这时结果必须作废，否则会把界面拽回来。
+                if (epoch != flowEpoch) return@launch
+                _state.value = _state.value.copy(resources = results, loading = false, step = Step.RESOLVE, error = null)
             } catch (e: Exception) {
-                _state.value = _state.value.copy(
-                    loading = false,
-                    error = e.message ?: "解析失败，请检查链接与网络。",
-                )
+                if (epoch != flowEpoch) return@launch
+                handleFlowError(e, "解析失败，请检查链接与网络。")
             }
         }
     }
 
-    fun download() {
+    /**
+     * 解析/下载失败的统一处理：凭据失效时顺手清掉本地凭据并把界面切回未登录，
+     * 免得用户对着「已登录」一直重试。
+     */
+    private fun handleFlowError(e: Exception, fallback: String) {
+        val expired = e is AuthExpiredException
+        if (expired) {
+            credentials = null
+            pendingDownload = false
+            viewModelScope.launch { runCatching { tokenStore.clear() } }
+        }
+        _state.value = _state.value.copy(
+            loading = false,
+            loggedIn = if (expired) false else _state.value.loggedIn,
+            loginHint = if (expired) "登录状态已失效，请重新登录。" else _state.value.loginHint,
+            error = e.message ?: fallback,
+        )
+    }
+
+    /** 从头下载（解析页点「开始下载」）。 */
+    fun download() = downloadFrom(0, 0, 0)
+
+    /** 下载失败后点「重试」：从失败的那一本继续，已经下载好的不重复下载。 */
+    fun retryDownload() = downloadFrom(retryFromIndex, retrySaved, retryBookmarks)
+
+    private fun downloadFrom(startIndex: Int, savedBefore: Int, bookmarksBefore: Int) {
         val resources = _state.value.resources
-        if (resources.isEmpty()) return
+        if (resources.isEmpty() || startIndex !in resources.indices) return
         val cred = credentials ?: run {
-            _state.value = _state.value.copy(error = "登录凭据缺失。")
+            _state.value = _state.value.copy(error = "登录凭据缺失，请先登录。")
             return
         }
-        _state.value = _state.value.copy(loading = true, error = null, step = Step.DOWNLOAD)
-        viewModelScope.launch {
-            val saved = mutableListOf<SavedItem>()
-            var bookmarks = 0
-            resources.forEachIndexed { index, resource ->
-                _state.value = _state.value.copy(currentIndex = index)
+        cancelFlow()
+        val epoch = flowEpoch
+        _state.value = _state.value.copy(
+            loading = true,
+            error = null,
+            step = Step.DOWNLOAD,
+            progressDone = 0,
+            progressTotal = 0,
+            downloadedCount = savedBefore,
+            bookmarksCount = bookmarksBefore,
+        )
+        flowJob = viewModelScope.launch {
+            var saved = savedBefore
+            var bookmarks = bookmarksBefore
+            for (index in startIndex until resources.size) {
+                _state.value = _state.value.copy(currentIndex = index, progressDone = 0, progressTotal = 0)
                 // 合规约束：逐本之间留出固定间隔，避免形成高频批量抓取。
-                if (index > 0) delay(DOWNLOAD_INTERVAL_MS)
+                if (index > startIndex) delay(DOWNLOAD_INTERVAL_MS)
                 try {
+                    val resource = resources[index]
                     val file = engine.download(resource, cred) { done, total ->
                         _state.value = _state.value.copy(progressDone = done, progressTotal = total)
                     }
@@ -312,22 +389,43 @@ class DownloadViewModel(app: Application) : AndroidViewModel(app) {
                     if (added) bookmarks++
                     val item = SavedItem(resource.title, file.absolutePath, resource.format, resource.edition, System.currentTimeMillis())
                     libraryStore.append(item)
-                    saved.add(item)
-                    _state.value = _state.value.copy(downloadedCount = saved.size, bookmarksCount = bookmarks)
+                    saved++
+                    _state.value = _state.value.copy(downloadedCount = saved, bookmarksCount = bookmarks)
                 } catch (e: Exception) {
-                    _state.value = _state.value.copy(
-                        loading = false,
-                        error = "第 ${index + 1}/${resources.size} 本下载失败：${e.message}",
-                    )
+                    if (epoch != flowEpoch) return@launch
+                    // 记住续传点：下次「重试」直接从这一本开始。
+                    retryFromIndex = index
+                    retrySaved = saved
+                    retryBookmarks = bookmarks
+                    val prefix = if (resources.size > 1) "第 ${index + 1}/${resources.size} 本下载失败：" else ""
+                    handleFlowError(e, "下载失败，请检查网络后重试。")
+                    _state.value = _state.value.copy(error = prefix + (_state.value.error ?: "下载失败"))
                     return@launch
                 }
             }
+            retryFromIndex = 0
+            retrySaved = 0
+            retryBookmarks = 0
             _state.value = _state.value.copy(
                 loading = false,
                 library = libraryStore.load(),
                 step = Step.DONE,
+                downloadedCount = saved,
+                bookmarksCount = bookmarks,
             )
         }
+    }
+
+    /** 下载失败后从「下载中」页面退回首页：保留已勾选的教材，方便再次发起。 */
+    fun leaveFailedDownload() {
+        cancelFlow()
+        _state.value = _state.value.copy(
+            step = Step.BROWSE,
+            loading = false,
+            error = null,
+            progressDone = 0,
+            progressTotal = 0,
+        )
     }
 
     fun deleteFromLibrary(path: String) {
@@ -341,7 +439,11 @@ class DownloadViewModel(app: Application) : AndroidViewModel(app) {
 
     /** 下载完成后返回首页：清掉本次下载流程状态，但保留目录与登录态，避免每次都要重新登录。 */
     fun reset() {
+        cancelFlow()
         pendingDownload = false
+        retryFromIndex = 0
+        retrySaved = 0
+        retryBookmarks = 0
         val s = _state.value
         _state.value = s.copy(
             step = Step.BROWSE,

@@ -19,7 +19,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -57,7 +59,6 @@ import coil.compose.AsyncImage
 import coil.imageLoader
 import coil.request.ImageRequest
 import kotlinx.coroutines.delay
-import kotlin.math.absoluteValue
 
 /** 封面预热的数量上限与间隔：兼顾首滑流畅与"不做批量抓取"的合规约束。 */
 private const val PREFETCH_LIMIT = 40
@@ -95,10 +96,11 @@ fun BrowseScreen(
                     state.query.isBlank() ||
                         b.title.contains(state.query, ignoreCase = true) ||
                         b.subject.contains(state.query, ignoreCase = true) ||
-                        b.grade.contains(state.query, ignoreCase = true)
+                        b.grade.contains(state.query, ignoreCase = true) ||
+                        b.version.contains(state.query, ignoreCase = true)
                     )
+            }
         }
-    }
 
     // 目录/筛选变化后预热列表封面，缓解首次快速滑动的卡顿。
     // 合规约束：逐张、带间隔预热，不做一次性并发上百个请求（见 README 的「本项目的红线」）。
@@ -158,12 +160,50 @@ fun BrowseScreen(
         // 搜索 + 筛选
         Column(Modifier.padding(horizontal = 20.dp)) {
             Spacer(Modifier.height(16.dp))
+            // 错误提示：勾选超限、解析失败等都在这里告诉用户，避免「点了没反应」。
+            state.error?.let { message ->
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.errorContainer,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        Modifier.padding(start = 12.dp, top = 4.dp, bottom = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            message,
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                        )
+                        IconButton(onClick = viewModel::dismissError) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "关闭提示",
+                                tint = MaterialTheme.colorScheme.onErrorContainer,
+                            )
+                        }
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+            }
             OutlinedTextField(
                 value = state.query,
                 onValueChange = viewModel::setQuery,
                 modifier = Modifier.fillMaxWidth(),
                 placeholder = { Text("搜索书名 / 学科 / 年级") },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                // 目录有 12 小时缓存，之前只有「列表为空」时才能刷新，这里补一个常驻入口。
+                trailingIcon = {
+                    if (state.catalogLoading) {
+                        CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                    } else {
+                        IconButton(onClick = viewModel::refreshCatalog) {
+                            Icon(Icons.Default.Refresh, contentDescription = "刷新教材目录")
+                        }
+                    }
+                },
                 singleLine = true,
                 shape = RoundedCornerShape(16.dp),
             )
@@ -309,5 +349,6 @@ private fun coverColor(subject: String): Color {
         Color(0xFF6750A4), Color(0xFF00696D), Color(0xFF7D5260), Color(0xFF8B5000),
         Color(0xFF386A20), Color(0xFF4A5F82), Color(0xFF006875), Color(0xFF7C4DFF),
     )
-    return palette[subject.hashCode().absoluteValue % palette.size]
+    // floorMod 而不是 absoluteValue：Int.MIN_VALUE 取绝对值仍是负数，会越界崩溃。
+    return palette[Math.floorMod(subject.hashCode(), palette.size)]
 }

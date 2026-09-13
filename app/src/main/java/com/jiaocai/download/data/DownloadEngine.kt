@@ -24,6 +24,13 @@ import java.util.concurrent.TimeUnit
  */
 class DownloadEngine(private val context: Context) {
 
+    private companion object {
+        const val BUFFER_SIZE = 64 * 1024
+
+        /** 进度回调节流：每个 64KB 数据块都回调一次会让界面每秒重组上百次。 */
+        const val PROGRESS_INTERVAL_MS = 100L
+    }
+
     private val client = OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)
         .readTimeout(120, TimeUnit.SECONDS)
@@ -48,7 +55,8 @@ class DownloadEngine(private val context: Context) {
 
         client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) {
-                throw DownloadException("下载失败 HTTP ${response.code}: $url")
+                // 401/403 说明凭据问题，重试无用；统一翻译成用户能看懂的提示。
+                throw httpFailure(response.code, url)
             }
             val body = response.body ?: throw DownloadException("响应为空: $url")
             val total = body.contentLength()
@@ -62,14 +70,20 @@ class DownloadEngine(private val context: Context) {
             try {
                 body.byteStream().use { input ->
                     part.outputStream().use { output ->
-                        val buffer = ByteArray(64 * 1024)
+                        val buffer = ByteArray(BUFFER_SIZE)
                         var read: Int
                         var done = 0L
+                        var lastReport = 0L
                         while (input.read(buffer).also { read = it } != -1) {
                             output.write(buffer, 0, read)
                             done += read
-                            onProgress(done, total)
+                            val now = System.currentTimeMillis()
+                            if (now - lastReport >= PROGRESS_INTERVAL_MS) {
+                                lastReport = now
+                                onProgress(done, total)
+                            }
                         }
+                        onProgress(done, total)
                         output.flush()
                         output.fd.sync()
                     }

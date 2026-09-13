@@ -245,7 +245,8 @@ object SmartEduApi {
         client.newCall(builder.build()).execute().use { resp ->
             val body = resp.body?.string()
             if (!resp.isSuccessful || body == null) {
-                throw ResolveException("请求失败 HTTP ${resp.code}: $url")
+                // 401/403 等状态码统一翻译成用户能看懂、且知道下一步该做什么的提示。
+                throw httpFailure(resp.code, url)
             }
             return body
         }

@@ -3,6 +3,8 @@
 package com.jiaocai.download.ui.screens
 
 import android.annotation.SuppressLint
+import android.os.Build
+import android.view.View
 import android.view.ViewGroup
 import android.webkit.CookieManager
 import android.webkit.WebResourceRequest
@@ -127,6 +129,16 @@ fun LoginScreen(
             // 登录页只需要访问 https 站点，关闭本地文件/内容访问，缩小攻击面。
             settings.allowFileAccess = false
             settings.allowContentAccess = false
+            // 不让 WebView 自己保存表单/密码。
+            @Suppress("DEPRECATION")
+            settings.saveFormData = false
+            @Suppress("DEPRECATION")
+            settings.savePassword = false
+            // 也不要让系统自动填充接管登录框：否则登录后会弹「保存 auth.smartedu.cn 的
+            // 账号密码？」，等于把平台凭据交给厂商/Google 的密码管理器保管。
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
+            }
             webViewClient = object : WebViewClient() {
                 private fun intercept(view: WebView, url: String): Boolean {
                     // 登录成功后离开 auth 域的跳转（官网首页/手机版首页等）：先从当前 auth 页抓 token，再阻止跳转。

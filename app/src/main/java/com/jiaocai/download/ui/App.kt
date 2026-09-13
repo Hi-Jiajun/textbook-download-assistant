@@ -25,12 +25,14 @@ fun App(viewModel: DownloadViewModel = viewModel()) {
 
     // 系统返回键与界面上的返回箭头保持一致，避免在子页面按返回直接退出应用。
     // 例外：首次启动声明未确认时返回键不生效（必须主动点「我已知悉」）；
-    // 下载进行中也不响应返回，避免留下半截状态。
+    // 下载进行中不响应返回，避免留下半截状态；但下载失败后必须能退出，
+    // 否则用户会卡在一个没有任何出口的页面上。
     BackHandler(enabled = state.needAgreement || state.step != DownloadViewModel.Step.BROWSE) {
         when {
             state.needAgreement -> Unit
             state.step == DownloadViewModel.Step.DONE -> viewModel.reset()
-            state.step == DownloadViewModel.Step.DOWNLOAD -> Unit
+            state.step == DownloadViewModel.Step.DOWNLOAD ->
+                if (state.error != null) viewModel.leaveFailedDownload() else Unit
             else -> viewModel.go(DownloadViewModel.Step.BROWSE)
         }
     }
@@ -66,6 +68,10 @@ fun App(viewModel: DownloadViewModel = viewModel()) {
                         done = state.progressDone,
                         total = state.progressTotal,
                         error = state.error,
+                        index = state.currentIndex,
+                        count = state.resources.size,
+                        onRetry = viewModel::retryDownload,
+                        onBackHome = viewModel::leaveFailedDownload,
                     )
                     DownloadViewModel.Step.DONE -> DoneScreen(
                         downloadedCount = state.downloadedCount,
