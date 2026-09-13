@@ -56,6 +56,12 @@ iOS 版**不上架 App Store**：大陆区需要 ICP 备案号（个人拿不到
 > 系统要求：iOS 15 及以上。IPA 里不含任何 Apple 证书，也不含任何账号信息；请只从本仓库下载，不要安装来源不明的 IPA。
 > 功能与 Android 版一致：浏览目录、应用内登录、解析、下载、写入 PDF 章节书签、教材库；「关于与免责」页同样内置。
 
+| 首次启动使用声明 | 浏览教材目录 |
+| --- | --- |
+| ![iOS 使用声明](screenshots/ios/01_usage_notice.png) | ![iOS 浏览](screenshots/ios/02_browse.png) |
+
+iOS 版的构建与冒烟测试都在 GitHub Actions 的 macOS runner 上完成：每次改动都会重新编译出 IPA，并在 iPhone 模拟器里真实启动一次、截图留档（`ios/` 目录下是 XcodeGen 工程描述与源码，工程文件由 CI 生成，不入库）。
+
 ## 本地运行
 
 1. 用 Android Studio 打开本项目根目录（需支持 AGP 9.0.1 的版本，例如 Quail 3）。
