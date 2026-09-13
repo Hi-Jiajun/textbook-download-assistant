@@ -22,6 +22,28 @@
 - **关于与免责**：应用内提供完整免责声明、本应用的承诺与开源许可；首次启动需确认使用声明后才能使用。
 - **永久免费**：没有付费点、没有功能锁、没有广告，也不做任何数据上报。自愿赞助见「赞助」一节。
 
+## 下载安装
+
+安装包只在 GitHub Releases 提供，**不上架任何应用商店**（个人开发者无法完成教育类 App 的备案资质，详见「本项目的红线」）。
+
+1. 到 [Releases](https://github.com/Hi-Jiajun/textbook-download-assistant/releases) 下载最新版本的 `textbook-download-assistant-<版本号>-release.apk`。
+2. 核对校验值（同名文件旁的 `SHA256SUMS.txt`，本地校验）：
+
+   ```powershell
+   Get-FileHash .\textbook-download-assistant-v0.1.0-release.apk -Algorithm SHA256
+   ```
+
+   ```bash
+   sha256sum textbook-download-assistant-v0.1.0-release.apk
+   ```
+
+3. 手机上允许「安装未知来源应用」后安装，首次启动需阅读并确认使用声明。
+4. 如果之前装过用调试密钥签名的包（`assembleDebug` 产出的 APK），需要先卸载再安装——签名不同无法覆盖安装，卸载会清空本地教材库记录。
+
+系统要求：Android 5.0（API 21）及以上。
+
+> 发布包由项目维护者本人签名（证书 CN=`Hi-Jiajun`）。如果你拿到的 APK 签名对不上，请不要安装。
+
 ## 本地运行
 
 1. 用 Android Studio 打开本项目根目录（需支持 AGP 9.0.1 的版本，例如 Quail 3）。
