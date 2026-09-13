@@ -75,4 +75,11 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation("androidx.test:core-ktx:1.6.1")
     testImplementation("org.robolectric:robolectric:4.16.1")
+
+    // Compose 界面冒烟测试（跑在 Robolectric 上，不需要模拟器或真机）
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    // createComposeRule() 需要一个宿主 Activity：ui-test-manifest 把它声明进清单。
+    // 必须用 debugImplementation 才会参与清单合并（testImplementation 只进测试类路径），
+    // 因此它对 release 构建没有任何影响。
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
