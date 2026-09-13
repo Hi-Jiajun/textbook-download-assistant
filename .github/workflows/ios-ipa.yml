@@ -118,11 +118,13 @@ jobs:
           ls -la *.png
           xcrun simctl spawn "$UDID" log show --last 2m --style compact \
             --predicate 'process == "TextbookDownloader"' 2>/dev/null | tail -20 || true
-          CRASHES=$(ls "$HOME/Library/Logs/DiagnosticReports"/TextbookDownloader* 2>/dev/null | wc -l | tr -d ' ')
-          echo "崩溃报告数量：$CRASHES"
-          if [ "$CRASHES" != "0" ]; then
+          # pipefail 下用 ls 匹配不到文件会返回非 0，导致脚本提前退出，这里用 nullglob 计数。
+          shopt -s nullglob
+          CRASH_FILES=("$HOME/Library/Logs/DiagnosticReports"/TextbookDownloader*)
+          echo "崩溃报告数量：${#CRASH_FILES[@]}"
+          if [ "${#CRASH_FILES[@]}" != "0" ]; then
             echo "检测到崩溃报告，冒烟测试不通过 ✗"
-            cat "$HOME/Library/Logs/DiagnosticReports"/TextbookDownloader* | head -40
+            head -40 "${CRASH_FILES[0]}"
             exit 1
           fi
           echo "未发现崩溃报告 ✓"
