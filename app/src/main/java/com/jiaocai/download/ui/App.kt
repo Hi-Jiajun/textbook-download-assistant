@@ -1,5 +1,6 @@
 package com.jiaocai.download.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
@@ -21,6 +22,19 @@ import com.jiaocai.download.ui.theme.TextbookTheme
 @Composable
 fun App(viewModel: DownloadViewModel = viewModel()) {
     val state by viewModel.state.collectAsState()
+
+    // 系统返回键与界面上的返回箭头保持一致，避免在子页面按返回直接退出应用。
+    // 例外：首次启动声明未确认时返回键不生效（必须主动点「我已知悉」）；
+    // 下载进行中也不响应返回，避免留下半截状态。
+    BackHandler(enabled = state.needAgreement || state.step != DownloadViewModel.Step.BROWSE) {
+        when {
+            state.needAgreement -> Unit
+            state.step == DownloadViewModel.Step.DONE -> viewModel.reset()
+            state.step == DownloadViewModel.Step.DOWNLOAD -> Unit
+            else -> viewModel.go(DownloadViewModel.Step.BROWSE)
+        }
+    }
+
     TextbookTheme {
         Surface(Modifier.fillMaxSize()) {
             // 安全区适配在各界面内按需处理（内容页避开状态栏/挖孔；下载页全屏沉浸）
