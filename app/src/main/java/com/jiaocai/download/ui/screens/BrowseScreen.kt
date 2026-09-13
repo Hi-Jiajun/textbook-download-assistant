@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -28,6 +29,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -54,7 +56,12 @@ import com.jiaocai.download.ui.DownloadViewModel
 import coil.compose.AsyncImage
 import coil.imageLoader
 import coil.request.ImageRequest
+import kotlinx.coroutines.delay
 import kotlin.math.absoluteValue
+
+/** 封面预热的数量上限与间隔：兼顾首滑流畅与"不做批量抓取"的合规约束。 */
+private const val PREFETCH_LIMIT = 40
+private const val PREFETCH_INTERVAL_MS = 120L
 
 /** 第一步：浏览并勾选要下载的教材。 */
 @Composable
@@ -63,6 +70,7 @@ fun BrowseScreen(
     state: DownloadViewModel.UiState,
     onOpenLibrary: () -> Unit,
     onOpenCredentials: () -> Unit,
+    onOpenAbout: () -> Unit,
 ) {
     // 级联：学科依赖已选学段，版本依赖已选学段+学科
     val subjectOptions = remember(state.textbooks, state.stageFilter) {
@@ -92,13 +100,18 @@ fun BrowseScreen(
         }
     }
 
-    // 目录/筛选变化后，一次性预热当前列表的封面缩略图，避免首次滑动时逐个下载导致卡顿。
+    // 目录/筛选变化后预热列表封面，缓解首次快速滑动的卡顿。
+    // 合规约束：逐张、带间隔预热，不做一次性并发上百个请求（见 README 的「本项目的红线」）。
     val context = LocalContext.current
     LaunchedEffect(filtered) {
         if (filtered.isNotEmpty()) {
             val loader = context.imageLoader
-            filtered.take(120).forEach { b ->
-                b.thumb?.let { u ->
+            filtered.asSequence()
+                .mapNotNull { it.thumb?.takeIf(String::isNotBlank) }
+                .distinct()
+                .take(PREFETCH_LIMIT)
+                .forEachIndexed { index, u ->
+                    if (index > 0) delay(PREFETCH_INTERVAL_MS)
                     loader.enqueue(
                         ImageRequest.Builder(context)
                             .data(u)
@@ -107,7 +120,6 @@ fun BrowseScreen(
                             .build(),
                     )
                 }
-            }
         }
     }
 
@@ -133,6 +145,13 @@ fun BrowseScreen(
             }
             TextButton(onClick = onOpenLibrary) {
                 Text("教材库", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+            }
+            IconButton(onClick = onOpenAbout) {
+                Icon(
+                    Icons.Default.Info,
+                    contentDescription = "关于与免责",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
 

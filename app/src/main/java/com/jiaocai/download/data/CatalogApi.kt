@@ -5,9 +5,7 @@ import android.util.JsonReader
 import android.util.JsonToken
 import com.jiaocai.download.model.Textbook
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -30,6 +28,15 @@ object CatalogApi {
 
     /** 目录缓存有效期：12 小时。期间再次启动直接读本地缓存，省流量也更快。 */
     private const val CACHE_TTL_MS = 12 * 60 * 60 * 1000L
+
+    /**
+     * 合规约束：拉取多个清单文件之间的固定间隔（毫秒）。
+     *
+     * 平台《用户协议》第 6.1 条禁止以自动化程序批量获取平台内容。本应用只做用户
+     * 主动触发的、串行的少量请求，不做并发抓取。修改前请先阅读 README 的
+     * 「本项目的红线」一节。
+     */
+    private const val REQUEST_INTERVAL_MS = 1500L
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)
@@ -74,9 +81,11 @@ object CatalogApi {
             .filter { it.isNotEmpty() }
         if (urls.isEmpty()) throw CatalogException("未获取到教材清单。")
 
-        // 并发拉取各清单文件，缩短等待时间
-        val lists = coroutineScope {
-            urls.map { url -> async(Dispatchers.IO) { parseBookList(url) } }.awaitAll()
+        // 合规约束：串行 + 固定间隔，不做并发批量抓取。清单文件通常只有几个，
+        // 串行只多花几秒，换来的是「个人正常使用」而非「爬虫」的形态。
+        val lists = urls.mapIndexed { index, url ->
+            if (index > 0) delay(REQUEST_INTERVAL_MS)
+            parseBookList(url)
         }
         return lists.flatten().distinctBy { it.id }
     }

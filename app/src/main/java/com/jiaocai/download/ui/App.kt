@@ -8,12 +8,14 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.jiaocai.download.ui.screens.AboutScreen
 import com.jiaocai.download.ui.screens.BrowseScreen
 import com.jiaocai.download.ui.screens.DoneScreen
 import com.jiaocai.download.ui.screens.DownloadScreen
 import com.jiaocai.download.ui.screens.LibraryScreen
 import com.jiaocai.download.ui.screens.LoginScreen
 import com.jiaocai.download.ui.screens.ResolveScreen
+import com.jiaocai.download.ui.screens.UsageNoticeDialog
 import com.jiaocai.download.ui.theme.TextbookTheme
 
 @Composable
@@ -29,6 +31,7 @@ fun App(viewModel: DownloadViewModel = viewModel()) {
                         state = state,
                         onOpenLibrary = viewModel::openLibrary,
                         onOpenCredentials = viewModel::openCredentials,
+                        onOpenAbout = viewModel::openAbout,
                     )
                     DownloadViewModel.Step.LOGIN -> LoginScreen(
                         hint = state.loginHint,
@@ -61,6 +64,14 @@ fun App(viewModel: DownloadViewModel = viewModel()) {
                         onDelete = viewModel::deleteFromLibrary,
                         onBack = { viewModel.go(DownloadViewModel.Step.BROWSE) },
                     )
+                    DownloadViewModel.Step.ABOUT -> AboutScreen(
+                        onBack = { viewModel.go(DownloadViewModel.Step.BROWSE) },
+                    )
+                }
+
+                // 首次启动必须主动确认使用声明后才能使用（不允许点外部或按返回键跳过）。
+                if (state.needAgreement) {
+                    UsageNoticeDialog(onAccept = viewModel::acceptNotice)
                 }
             }
         }

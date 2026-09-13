@@ -4,6 +4,7 @@ import android.app.Application
 import android.widget.Toast
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.jiaocai.download.data.AppPrefs
 import com.jiaocai.download.data.AuthSigner
 import com.jiaocai.download.data.CatalogApi
 import com.jiaocai.download.data.DownloadEngine
@@ -17,6 +18,7 @@ import com.jiaocai.download.model.Textbook
 import coil.imageLoader
 import coil.request.ImageRequest
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -24,7 +26,7 @@ import kotlinx.coroutines.withContext
 
 class DownloadViewModel(app: Application) : AndroidViewModel(app) {
 
-    enum class Step { BROWSE, LOGIN, RESOLVE, DOWNLOAD, DONE, LIBRARY }
+    enum class Step { BROWSE, LOGIN, RESOLVE, DOWNLOAD, DONE, LIBRARY, ABOUT }
 
     data class UiState(
         val step: Step = Step.BROWSE,
@@ -52,6 +54,8 @@ class DownloadViewModel(app: Application) : AndroidViewModel(app) {
         val downloadedCount: Int = 0,
         val bookmarksCount: Int = 0,
         val library: List<SavedItem> = emptyList(),
+        // 首次启动的使用声明是否待用户确认
+        val needAgreement: Boolean = false,
     )
 
     private val _state = MutableStateFlow(UiState())
@@ -60,6 +64,7 @@ class DownloadViewModel(app: Application) : AndroidViewModel(app) {
     private val tokenStore = TokenStore(app)
     private val engine = DownloadEngine(app)
     private val libraryStore = LibraryStore(app)
+    private val appPrefs = AppPrefs(app)
     private var credentials: AuthSigner.Credentials? = null
     private var pendingDownload = false
 
@@ -67,6 +72,21 @@ class DownloadViewModel(app: Application) : AndroidViewModel(app) {
         _state.value = _state.value.copy(library = libraryStore.load())
         loadCatalog()
         restoreCredentials()
+        checkUsageNotice()
+    }
+
+    /** 首次启动时确认使用声明是否已被接受；读取失败时不阻塞用户。 */
+    private fun checkUsageNotice() {
+        viewModelScope.launch {
+            val accepted = runCatching { appPrefs.hasAcceptedNotice() }.getOrDefault(true)
+            if (!accepted) _state.value = _state.value.copy(needAgreement = true)
+        }
+    }
+
+    /** 用户点了「我已知悉」。 */
+    fun acceptNotice() {
+        _state.value = _state.value.copy(needAgreement = false)
+        viewModelScope.launch { runCatching { appPrefs.setAcceptedNotice() } }
     }
 
     /** 启动时从本地恢复上次登录的凭据，实现「记住登录」。 */
@@ -153,6 +173,11 @@ class DownloadViewModel(app: Application) : AndroidViewModel(app) {
         _state.value = _state.value.copy(step = step, error = null)
     }
 
+    /** 打开「关于与免责」页。 */
+    fun openAbout() {
+        _state.value = _state.value.copy(step = Step.ABOUT, error = null)
+    }
+
     fun openLibrary() {
         _state.value = _state.value.copy(step = Step.LIBRARY, library = libraryStore.load(), error = null)
     }
@@ -184,6 +209,13 @@ class DownloadViewModel(app: Application) : AndroidViewModel(app) {
         val selected = _state.value.textbooks.filter { it.id in _state.value.selectedIds }
         if (selected.isEmpty()) {
             _state.value = _state.value.copy(error = "请先勾选至少一本教材。")
+            return
+        }
+        // 合规约束：限制单次批量规模，见文件末尾 MAX_BATCH_SIZE 说明。
+        if (selected.size > MAX_BATCH_SIZE) {
+            _state.value = _state.value.copy(
+                error = "单次最多下载 $MAX_BATCH_SIZE 本，请分几次下载（当前已勾选 ${selected.size} 本）。",
+            )
             return
         }
         if (credentials == null) {
@@ -270,6 +302,8 @@ class DownloadViewModel(app: Application) : AndroidViewModel(app) {
             var bookmarks = 0
             resources.forEachIndexed { index, resource ->
                 _state.value = _state.value.copy(currentIndex = index)
+                // 合规约束：逐本之间留出固定间隔，避免形成高频批量抓取。
+                if (index > 0) delay(DOWNLOAD_INTERVAL_MS)
                 try {
                     val file = engine.download(resource, cred) { done, total ->
                         _state.value = _state.value.copy(progressDone = done, progressTotal = total)
@@ -322,5 +356,19 @@ class DownloadViewModel(app: Application) : AndroidViewModel(app) {
             bookmarksCount = 0,
             loginHint = if (credentials != null) "当前已登录。" else "请登录...",
         )
+    }
+
+    companion object {
+        /**
+         * 合规约束：单次批量下载上限，以及逐本之间的固定间隔。
+         *
+         * 本应用定位是「个人学习使用」的工具，不是批量抓取器。放开这两个限制会让
+         * 使用形态向「批量获取平台内容」偏移：既违反平台《用户协议》第 6.1 条对
+         * 自动化程序获取平台内容的禁止，也会加重工具作者一方的风险。
+         *
+         * 修改前请先阅读 README 的「免责声明」与「本项目的红线」两节。
+         */
+        const val MAX_BATCH_SIZE = 10
+        const val DOWNLOAD_INTERVAL_MS = 2000L
     }
 }

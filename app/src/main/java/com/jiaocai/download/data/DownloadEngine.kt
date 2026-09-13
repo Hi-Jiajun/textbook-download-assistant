@@ -10,7 +10,18 @@ import okhttp3.Request
 import java.io.File
 import java.util.concurrent.TimeUnit
 
-/** 负责按 URL 现算 X-ND-AUTH 签名头，把资源流式写入本地。 */
+/**
+ * 负责按 URL 现算 X-ND-AUTH 签名头，把资源流式写入本地。
+ *
+ * ── 合规红线（勿删）──────────────────────────────────────────
+ * 1. 下载结果只能写入用户本机（当前为应用专属外部下载目录），不得上传、缓存或
+ *    中转到我方服务器——本项目也没有任何服务端。
+ * 2. 不得对下载到的 PDF 做任何去水印、去权利标识或解密处理。教材水印属于权利人
+ *    的技术措施与权利管理信息，移除它可能独立构成违法。
+ * 3. 逐本下载之间保留间隔，不做并发批量抓取（间隔见 DownloadViewModel）。
+ * 详见 README「本项目的红线」。
+ * ─────────────────────────────────────────────────────────
+ */
 class DownloadEngine(private val context: Context) {
 
     private val client = OkHttpClient.Builder()
