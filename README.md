@@ -68,9 +68,10 @@ App 内会打开国家中小学智慧教育平台登录页。登录成功后，A
 
 ## 验证记录（本地实测）
 
-- 构建：`assembleDebug` 通过；静态检查 `lintDebug` 0 error。
-- 单元测试：16 个用例全部通过（`testDebugUnitTest`）。
+- 构建：`assembleDebug` 通过；静态检查 `lintDebug` 0 error / 8 warning（均为「依赖有新版本」与第三方库误报）。
+- 单元测试：18 个用例全部通过（`testDebugUnitTest`），其中 2 个是「关于与免责」页与首次启动声明的 Compose 渲染冒烟测试。
 - Android 5.0.2 / API 21 模拟器：冷启动正常，教材目录与封面缩略图加载正常，勾选教材、进入登录页、展开手动凭据入口均正常，无崩溃。
+- 合规界面（API 21 模拟器实测）：首次启动弹出使用声明，按返回键无法跳过，点击「我已知悉」后才进入应用；同意后重启不再弹出；「关于与免责」页的免责声明四段、承诺条目、赞助说明与收款码占位提示均正常渲染（见 `screenshots/09`–`11`）。
 - 目录缓存：首次联网生成 `catalog_cache.jsonl`（约 1.2 MB），二次冷启动约 0.7 秒完成首屏。
 - 真机（小米 15S Pro / Android 16）：级联筛选、封面缩略图、登录与退出、批量下载、PDF 书签写入、教材库打开/分享/删除均正常；154 页课本实测写入 88 个多级书签。
 
@@ -83,6 +84,10 @@ App 内会打开国家中小学智慧教育平台登录页。登录成功后，A
 | 下载完成（含书签） | 教材库 | 删除确认 | 登录管理 |
 | --- | --- | --- | --- |
 | ![完成](screenshots/05_download_done_bookmarks.png) | ![教材库](screenshots/06_library.png) | ![删除](screenshots/07_delete_confirm.png) | ![登录](screenshots/08_login_manage.png) |
+
+| 首次启动使用声明 | 关于与免责 | 关于页·赞助说明 |
+| --- | --- | --- |
+| ![使用声明](screenshots/09_usage_notice.png) | ![关于与免责](screenshots/10_about_disclaimer.png) | ![赞助说明](screenshots/11_about_sponsor.png) |
 
 ## 本项目的红线
 
