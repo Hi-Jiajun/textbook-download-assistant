@@ -85,8 +85,11 @@ struct DownloadView: View {
                     .padding(.horizontal, 32)
                 Text("\(formatBytes(state.progressDone)) / \(formatBytes(state.progressTotal))")
                     .font(.footnote).foregroundColor(Theme.onSurfaceVariant)
-            } else if state.progressDone > 0 {
-                Text("已下载 \(formatBytes(state.progressDone))")
+            } else {
+                // 兜底：服务器没给总长度时，不画假的进度条，只如实显示已下载量。
+                Text(state.progressDone > 0
+                     ? "已下载 \(formatBytes(state.progressDone))（服务器未提供总大小）"
+                     : "正在获取文件大小…")
                     .font(.footnote).foregroundColor(Theme.onSurfaceVariant)
             }
 

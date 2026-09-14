@@ -387,6 +387,9 @@ final class DownloadEngine: NSObject, URLSessionDownloadDelegate {
     private var session: URLSession!
     private var progressHandler: ((Int64, Int64) -> Void)?
     private var lastReport = Date.distantPast
+    private var continuation: CheckedContinuation<URL, Error>?
+    private var destinationURL: URL?
+    private var finishedURL: URL?
 
     override init() {
         super.init()
@@ -416,24 +419,19 @@ final class DownloadEngine: NSObject, URLSessionDownloadDelegate {
         var request = URLRequest(url: url)
         PlatformHeaders.apply(to: &request, credentials: credentials, url: resource.url)
 
-        progressHandler = onProgress
-        lastReport = .distantPast
-        defer { progressHandler = nil }
-
-        let (tmpURL, response) = try await session.download(for: request)
-        guard let http = response as? HTTPURLResponse else {
-            throw ApiError(message: "响应异常。")
-        }
-        guard (200..<300).contains(http.statusCode) else {
-            throw HttpFailure.make(code: http.statusCode, url: resource.url)
-        }
-
         let ext = resource.format.isEmpty ? "pdf" : resource.format
-        let outURL = Self.downloadDirectory.appendingPathComponent(sanitize(resource.title) + "." + ext)
-        let fm = FileManager.default
-        if fm.fileExists(atPath: outURL.path) { try? fm.removeItem(at: outURL) }
-        try fm.moveItem(at: tmpURL, to: outURL)
-        return outURL
+        let destination = Self.downloadDirectory.appendingPathComponent(sanitize(resource.title) + "." + ext)
+
+        // 用显式的 downloadTask + delegate：Swift 并发的 download(for:) 不会把
+        // didWriteData 进度回调稳定地交给我们（实测进度条一直停在 0）。
+        return try await withCheckedThrowingContinuation { continuation in
+            self.continuation = continuation
+            self.progressHandler = onProgress
+            self.destinationURL = destination
+            self.finishedURL = nil
+            self.lastReport = .distantPast
+            self.session.downloadTask(with: request).resume()
+        }
     }
 
     func urlSession(
@@ -450,7 +448,47 @@ final class DownloadEngine: NSObject, URLSessionDownloadDelegate {
     }
 
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
-        // 使用 async 的 download(for:) 时由系统管理临时文件，这里无需处理。
+        // 这个回调返回后系统会删掉 location，所以必须当场搬到目标位置。
+        guard let http = downloadTask.response as? HTTPURLResponse else {
+            finish(.failure(ApiError(message: "响应异常。")))
+            return
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            finish(.failure(HttpFailure.make(code: http.statusCode,
+                                             url: downloadTask.originalRequest?.url?.absoluteString ?? "")))
+            return
+        }
+        guard let destination = destinationURL else {
+            finish(.failure(ApiError(message: "缺少目标路径。")))
+            return
+        }
+        do {
+            let fm = FileManager.default
+            if fm.fileExists(atPath: destination.path) {
+                try fm.removeItem(at: destination)
+            }
+            try fm.moveItem(at: location, to: destination)
+            finishedURL = destination
+        } catch {
+            finish(.failure(error))
+        }
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        if let error {
+            finish(.failure(error))
+        } else if let url = finishedURL {
+            finish(.success(url))
+        } else {
+            finish(.failure(ApiError(message: "下载未完成。")))
+        }
+    }
+
+    private func finish(_ result: Result<URL, Error>) {
+        guard let continuation else { return }
+        self.continuation = nil
+        progressHandler = nil
+        continuation.resume(with: result)
     }
 
     /// 去掉文件名里的非法字符，与 Android 版 sanitize 保持一致。
