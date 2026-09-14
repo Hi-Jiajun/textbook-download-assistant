@@ -40,6 +40,8 @@ final class LoginWebController: NSObject, ObservableObject, WKNavigationDelegate
     var onToken: ((String) -> Void)?
     /// 当前页面地址，显示在界面上，便于用户反馈「卡在哪一页」。
     @Published var currentURL: String = loginURL
+    /// 凭据探测状态，显示在界面上（只显示"是否读到"，不显示凭据内容）。
+    @Published var tokenProbe: String = "等待页面加载…"
     private var captured = false
     private var pollTask: Task<Void, Never>?
 
@@ -90,8 +92,10 @@ final class LoginWebController: NSObject, ObservableObject, WKNavigationDelegate
                 if let url = self.webView.url?.absoluteString, url != self.currentURL {
                     self.currentURL = url
                 }
-                if let value = await self.extract() {
-                    self.handle(value)
+                let raw = await self.extractRaw()
+                self.tokenProbe = self.describe(raw)
+                if let json = Self.jsonString(from: raw) {
+                    self.handle(json)
                     return
                 }
                 try? await Task.sleep(nanoseconds: 400_000_000)
@@ -99,12 +103,38 @@ final class LoginWebController: NSObject, ObservableObject, WKNavigationDelegate
         }
     }
 
-    private func extract() async -> String? {
+    /// 执行取凭据脚本，返回原始结果（字符串或字典，取决于平台桥接方式）。
+    private func extractRaw() async -> Any? {
         await withCheckedContinuation { continuation in
             webView.evaluateJavaScript(extractJS) { result, _ in
-                continuation.resume(returning: result as? String)
+                continuation.resume(returning: result)
             }
         }
+    }
+
+    /// 把探测结果显示成中文状态（绝不显示凭据内容）。
+    private func describe(_ raw: Any?) -> String {
+        if let text = raw as? String {
+            if text == "__NO_TOKEN__" { return "未在页面中找到登录凭据" }
+            if text.hasPrefix("{") { return "已读取到登录凭据" }
+            return "页面返回了未知内容"
+        }
+        if raw is [String: Any] { return "已读取到登录凭据" }
+        return "等待页面加载…"
+    }
+
+    /// 关键差异：Android 的 evaluateJavascript 把 JS 对象返回成 JSON 字符串，
+    /// 而 iOS 的 WKWebView 会把它桥接成 NSDictionary。之前只处理 String，
+    /// 导致取到凭据的那一刻返回 nil——登录成功却抓不到凭据，跳转又被拦下，
+    /// 于是卡在变暗的登录页。
+    private static func jsonString(from raw: Any?) -> String? {
+        if let text = raw as? String {
+            return text.hasPrefix("{") ? text : nil
+        }
+        guard let object = raw as? [String: Any], JSONSerialization.isValidJSONObject(object),
+              let data = try? JSONSerialization.data(withJSONObject: object),
+              let text = String(data: data, encoding: .utf8) else { return nil }
+        return text
     }
 
     private func handle(_ raw: String?) {
@@ -135,7 +165,9 @@ final class LoginWebController: NSObject, ObservableObject, WKNavigationDelegate
             // 登录成功后回跳官网：先抓 token，再阻止跳转。
             Task { [weak self] in
                 guard let self else { return }
-                self.handle(await self.extract())
+                let raw = await self.extractRaw()
+                self.tokenProbe = self.describe(raw)
+                self.handle(Self.jsonString(from: raw))
             }
             decisionHandler(.cancel)
             return
@@ -184,6 +216,8 @@ struct LoginView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("登录 国家中小学智慧教育平台").font(.headline)
                 Text(controller.currentURL).font(.caption).foregroundColor(Theme.onSurfaceVariant).lineLimit(2)
+                Text("凭据状态：\(controller.tokenProbe)")
+                    .font(.caption2).foregroundColor(Theme.onSurfaceVariant)
                 Text(state.error ?? state.loginHint)
                     .font(.footnote)
                     .foregroundColor(state.error == nil ? Theme.onSurfaceVariant : Theme.onErrorContainer)
