@@ -35,18 +35,25 @@ private let extractJS = """
 """
 
 /// 内嵌官网登录页：登录成功后离开 auth 域时拦截跳转，直接从 localStorage 取走凭据。
-final class LoginWebController: NSObject, ObservableObject, WKNavigationDelegate {
+final class LoginWebController: NSObject, ObservableObject, WKNavigationDelegate, WKUIDelegate {
     let webView: WKWebView
     var onToken: ((String) -> Void)?
+    /// 当前页面地址，显示在界面上，便于用户反馈「卡在哪一页」。
+    @Published var currentURL: String = loginURL
     private var captured = false
     private var pollTask: Task<Void, Never>?
 
     override init() {
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .default()
+        // 与 Android 版 settings.javaScriptCanOpenWindowsAutomatically 对齐：
+        // 验证码/登录页可能用 window.open 打开，不允许的话会被拦掉。
+        config.preferences.javaScriptCanOpenWindowsAutomatically = true
+        config.defaultWebpagePreferences.allowsContentJavaScript = true
         webView = WKWebView(frame: .zero, configuration: config)
         super.init()
         webView.navigationDelegate = self
+        webView.uiDelegate = self
     }
 
     func loadFresh() {
@@ -80,6 +87,9 @@ final class LoginWebController: NSObject, ObservableObject, WKNavigationDelegate
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
                 guard let self, !self.captured else { return }
+                if let url = self.webView.url?.absoluteString, url != self.currentURL {
+                    self.currentURL = url
+                }
                 if let value = await self.extract() {
                     self.handle(value)
                     return
@@ -110,6 +120,17 @@ final class LoginWebController: NSObject, ObservableObject, WKNavigationDelegate
         decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
     ) {
         let url = navigationAction.request.url?.absoluteString ?? ""
+
+        // 关键：只对「主框架」导航做拦截。
+        // Android 的 shouldOverrideUrlLoading 默认只为顶层导航回调，而 iOS 的
+        // decidePolicyFor 连 iframe（滑块验证码就在 iframe 里）也会回调——如果一律
+        // 取消，验证码就永远加载不出来。targetFrame == nil 视为新窗口请求，按主框架处理。
+        let isMainFrame = navigationAction.targetFrame?.isMainFrame ?? true
+        if !isMainFrame {
+            decisionHandler(.allow)
+            return
+        }
+
         if !url.hasPrefix(loginURLPrefix) {
             // 登录成功后回跳官网：先抓 token，再阻止跳转。
             Task { [weak self] in
@@ -120,6 +141,19 @@ final class LoginWebController: NSObject, ObservableObject, WKNavigationDelegate
             return
         }
         decisionHandler(.allow)
+    }
+
+    /// window.open / target=_blank：Android 的 WebView 默认在同窗口打开，iOS 默认会
+    /// 静默丢弃（验证码弹窗就是这么消失的）。这里改成同窗口加载，行为与 Android 对齐；
+    /// 若目标不是 auth 域，随后的 decidePolicyFor 会照常拦下并取走凭据。
+    func webView(
+        _ webView: WKWebView,
+        createWebViewWith configuration: WKWebViewConfiguration,
+        for navigationAction: WKNavigationAction,
+        windowFeatures: WKWindowFeatures
+    ) -> WKWebView? {
+        webView.load(navigationAction.request)
+        return nil
     }
 }
 
@@ -149,7 +183,7 @@ struct LoginView: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 Text("登录 国家中小学智慧教育平台").font(.headline)
-                Text(loginURL).font(.caption).foregroundColor(Theme.onSurfaceVariant)
+                Text(controller.currentURL).font(.caption).foregroundColor(Theme.onSurfaceVariant).lineLimit(2)
                 Text(state.error ?? state.loginHint)
                     .font(.footnote)
                     .foregroundColor(state.error == nil ? Theme.onSurfaceVariant : Theme.onErrorContainer)
