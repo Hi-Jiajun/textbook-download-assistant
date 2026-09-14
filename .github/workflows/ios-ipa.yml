@@ -77,8 +77,26 @@ jobs:
       - name: 选择一台 iPhone 模拟器
         id: sim
         run: |
-          UDID=$(xcrun simctl list devices available | awk -F '[()]' '/iPhone/ {print $2; exit}')
+          echo "===== 可用运行时 ====="
+          xcrun simctl list runtimes
+          # 优先选最新 iOS 运行时上的 iPhone（例如 iOS 26），贴近用户真机环境
+          RUNTIME=$(xcrun simctl list runtimes --json | python3 -c "
+          import json, sys
+          runtimes = json.load(sys.stdin)['runtimes']
+          ios = [r for r in runtimes if r['platform'] == 'iOS' and r.get('isAvailable')]
+          ios.sort(key=lambda r: tuple(int(x) for x in r['version'].split('.')), reverse=True)
+          print(ios[0]['identifier'] if ios else '')
+          ")
+          echo "选中运行时：$RUNTIME"
+          UDID=$(xcrun simctl list devices available --json | RUNTIME="$RUNTIME" python3 -c "
+          import json, os, sys
+          devices = json.load(sys.stdin)['devices']
+          runtime = os.environ['RUNTIME']
+          iphones = [d for d in devices.get(runtime, []) if 'iPhone' in d['name']]
+          print(iphones[0]['udid'] if iphones else '')
+          ")
           test -n "$UDID"
+          echo "选中设备：$UDID"
           echo "udid=$UDID" >> "$GITHUB_OUTPUT"
           xcrun simctl boot "$UDID" || true
           xcrun simctl bootstatus "$UDID" -b
